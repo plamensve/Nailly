@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { supabase } from './src/supabase';
@@ -58,9 +58,28 @@ export default function App() {
     } catch (e) { setError(friendlyError(e)); }
   }, []);
   useEffect(() => {
+    const handleAuthUrl = async (url: string) => {
+      try {
+        const parsed = new URL(url);
+        const code = parsed.searchParams.get('code');
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+          setScreen('home');
+          setTab('Profile');
+          Alert.alert('Email confirmed', 'Your Nailly account is ready.');
+        }
+      } catch (e) {
+        message('Email confirmation', e);
+      }
+    };
+
+    Linking.getInitialURL().then(url => { if (url) handleAuthUrl(url); });
+    const linkSubscription = Linking.addEventListener('url', ({ url }) => handleAuthUrl(url));
+
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
-    return () => listener.subscription.unsubscribe();
+    return () => { listener.subscription.unsubscribe(); linkSubscription.remove(); };
   }, []);
   useEffect(() => { refresh(session?.user.id); }, [session?.user.id, refresh]);
   useEffect(() => { if (selected) listSlots(selected.studio_id).then(setSlots).catch(e => setError(friendlyError(e))); }, [selected]);
@@ -127,7 +146,7 @@ function AuthScreen({ onDone }: { onDone: () => void }) {
     setBusy(true);
     try {
       if (register) {
-        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { display_name: name.trim(), role: artist ? 'artist' : 'client' } } });
+        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: 'nailly://auth/callback', data: { display_name: name.trim(), role: artist ? 'artist' : 'client' } } });
         if (error) throw error;
         if (!data.session) Alert.alert('Check your email', 'Confirm your email address, then sign in.'); else onDone();
       } else { const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }); if (error) throw error; onDone(); }
