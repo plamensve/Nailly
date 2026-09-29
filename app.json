@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Nailly",
+    "slug": "nailly",
+    "scheme": "nailly",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": { "supportsTablet": false, "bundleIdentifier": "com.nailly.app", "infoPlist": { "NSPhotoLibraryUsageDescription": "Choose a manicure photo to explore nail designs." } },
+    "android": { "adaptiveIcon": { "backgroundColor": "#fce8e4" } },
+    "plugins": [["expo-image-picker", { "photosPermission": "Choose a manicure photo to explore nail designs.", "cameraPermission": "Take a photo of a manicure for inspiration." }]]
+  }
+}
