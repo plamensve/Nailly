@@ -24,6 +24,7 @@ function LookCard({ look, favorite, saved, onPress }: { look: Look; favorite: ()
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [role, setRole] = useState<'client' | 'artist'>('client');
   const [tab, setTab] = useState<Tab>('Discover');
   const [screen, setScreen] = useState<'home' | 'results' | 'look' | 'auth' | 'studio'>('home');
   const [looks, setLooks] = useState<Look[]>([]);
@@ -43,18 +44,22 @@ export default function App() {
     try {
       const nextLooks = await listLooks(); setLooks(nextLooks); setError('');
       if (userId) {
-        const [savedResult, bookingsResult, studioResult] = await Promise.all([
+        const [savedResult, bookingsResult, studioResult, profileResult] = await Promise.all([
           supabase.from('saved_looks').select('look_id').eq('user_id', userId),
           supabase.from('bookings').select('id,studio_id,client_id,client_name,slot_id,starts_at,status,studios(id,owner_id,name,city,address,bio,phone)').order('starts_at', { ascending: false }),
           supabase.from('studios').select('id,owner_id,name,city,address,bio,phone').eq('owner_id', userId).maybeSingle(),
+          supabase.from('profiles').select('role').eq('id', userId).maybeSingle(),
         ]);
         if (savedResult.error) throw savedResult.error;
         if (bookingsResult.error) throw bookingsResult.error;
         if (studioResult.error) throw studioResult.error;
+        if (profileResult.error) throw profileResult.error;
+        const accountRole = profileResult.data?.role || session?.user.user_metadata?.role || 'client';
+        setRole(accountRole === 'artist' ? 'artist' : 'client');
         setSaved((savedResult.data || []).map(x => x.look_id));
         setBookings((bookingsResult.data || []) as unknown as Booking[]);
         setStudio(studioResult.data as Studio | null);
-      } else { setSaved([]); setBookings([]); setStudio(null); }
+      } else { setSaved([]); setBookings([]); setStudio(null); setRole('client'); }
     } catch (e) { setError(friendlyError(e)); }
   }, []);
   useEffect(() => {
@@ -131,7 +136,7 @@ export default function App() {
     : tab === 'Discover' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.eyebrow}>YOUR NEXT NAIL MOMENT</Text><Text style={styles.headline}>Find the nails{'\n'}you love.</Text><Text style={styles.body}>From inspiration to the artist who can make it yours.</Text><Pressable style={styles.upload} onPress={choosePhoto}><Text style={styles.camera}>▧</Text><View><Text style={styles.cardTitle}>Upload inspiration</Text><Text style={styles.caption}>Choose a photo from your gallery</Text></View></Pressable><Text style={styles.section}>Explore nail looks</Text><TextInput value={query} onChangeText={setQuery} placeholder="Search design, studio or city" placeholderTextColor="#ad9ca5" style={[styles.input, { marginBottom: 20 }]} />{looks.length ? grid(filteredLooks) : <Empty title="The gallery is growing" detail="Studios will appear here once they publish their first designs." />}</>
     : tab === 'Saved' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Saved looks</Text>{!session ? <Button label="Sign in to save looks" onPress={() => setScreen('auth')} /> : saved.length ? grid(looks.filter(look => saved.includes(look.id))) : <Empty title="Your collection starts here" detail="Tap the heart on a nail look to save it." />}</>
     : tab === 'Bookings' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Appointments</Text>{!session ? <Button label="Sign in to view bookings" onPress={() => setScreen('auth')} /> : bookings.filter(b => b.client_id === session.user.id).length ? bookings.filter(b => b.client_id === session.user.id).map(b => <View key={b.id} style={styles.panel}><Text style={styles.cardTitle}>{b.studios?.name || 'Nail studio'}</Text><Text style={styles.body}>{formatTime(b.starts_at)}  ·  {b.status}</Text>{b.status !== 'cancelled' && <Button label="Cancel request" secondary onPress={() => changeBooking(b.id, 'cancelled')} />}</View>) : <Empty title="Nothing booked yet" detail="Choose a studio and request an available time." />}</>
-    : <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Your space</Text>{session ? <><Text style={styles.body}>{session.user.email}</Text><Button label={studio ? 'Manage your studio' : 'Create a studio'} onPress={() => setScreen('studio')} /><Button label="Sign out" secondary onPress={() => supabase.auth.signOut()} /></> : <><Empty title="Welcome to Nailly" detail="Sign in as a client or create an artist account to show your work." /><Button label="Sign in or create account" onPress={() => setScreen('auth')} /></>}</>}
+    : <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Your space</Text>{session ? <><Text style={styles.body}>{session.user.user_metadata?.display_name || 'Nailly member'} · {session.user.email}</Text>{role === 'artist' ? <Button label={studio ? 'Manage your studio' : 'Create your studio'} onPress={() => setScreen('studio')} /> : <><View style={styles.panel}><Text style={styles.cardTitle}>Client profile</Text><Text style={styles.body}>Discover nail designs, save your favorites and book appointments with Nailly studios.</Text></View><Button label="Explore nail looks" onPress={() => { setTab('Discover'); setScreen('home'); }} /><Button label="My saved looks" secondary onPress={() => { setTab('Saved'); setScreen('home'); }} /><Button label="My appointments" secondary onPress={() => { setTab('Bookings'); setScreen('home'); }} /></>}<Button label="Sign out" secondary onPress={() => supabase.auth.signOut()} /></> : <><Empty title="Welcome to Nailly" detail="Sign in as a client or create an artist account to show your work." /><Button label="Sign in or create account" onPress={() => setScreen('auth')} /></>}</>}
     {!!error && <View style={styles.notice}><Text style={styles.noticeText}>Data connection: {error}</Text><Button label="Try again" secondary onPress={() => refresh(session?.user.id)} /></View>}
   </ScrollView><View style={styles.nav}>{tabNames.map((name, i) => <Pressable key={name} onPress={() => selectTab(name)} style={styles.navItem}><Text style={[styles.navIcon, tab === name && styles.active]}>{['⌕','♡','▤','◯'][i]}</Text><Text style={[styles.navLabel, tab === name && styles.active]}>{name}</Text></Pressable>)}</View></SafeAreaView>;
 }
