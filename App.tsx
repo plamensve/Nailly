@@ -6,7 +6,8 @@ import DateTimePicker from '@expo/ui/community/datetime-picker';
 import { supabase } from './src/supabase';
 import { indexLook, matchPhoto, matchingConfigured } from './src/matching';
 import { Booking, deleteMyAccount, friendlyError, getBookingRating, getClientRating, getStudioRating, listLooks, listSlots, looksByIds, Look, pickPortfolioImage, Profile, rateBooking, replaceLookImage, Slot, Studio, updateLook, uploadAvatar, uploadLook } from './src/api';
-import { legalPages, LegalPageKey } from './src/legal';
+import { legalPages } from './src/legal';
+import type { LegalPageKey } from './src/legal';
 
 const colors = { ink: '#452638', muted: '#877582', coral: '#ec817a', blush: '#fce8e4', canvas: '#fffaf7', edge: '#f2e6e3' };
 const tabNames = ['Discover', 'Saved', 'Bookings', 'Profile'] as const;
@@ -178,6 +179,86 @@ export default function App() {
 }
 
 function Empty({ title, detail }: { title: string; detail: string }) { return <View style={styles.empty}><View style={styles.emptyArt}><View style={styles.emptyArtInner}><Text style={styles.emptyArtN}>n</Text><Text style={styles.emptyArtDot}>.</Text></View></View><Text style={styles.emptyTitle}>{title}</Text><Text style={styles.emptyDetail}>{detail}</Text></View>; }
+
+
+function StarRating({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return <View style={styles.stars}>{[1,2,3,4,5].map(star => <Pressable key={star} onPress={() => onChange(star)} style={styles.starButton}><Text style={[styles.star, star <= value && styles.starActive]}>★</Text></Pressable>)}</View>;
+}
+
+function AppointmentScreen({ booking, session, onStatus, notify }: { booking: Booking; session: Session | null; onStatus: (id: string, status: 'confirmed' | 'cancelled') => Promise<void>; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [summary, setSummary] = useState<{avg_rating:number|null;rating_count:number}>({avg_rating:null,rating_count:0});
+  const [saving, setSaving] = useState(false);
+  const isStudioOwner = Boolean(session && booking.studios?.owner_id === session.user.id);
+  const isClient = Boolean(session && booking.client_id === session.user.id);
+  const targetType: 'studio' | 'client' = isStudioOwner ? 'client' : 'studio';
+  const appointmentPassed = new Date(booking.starts_at) <= new Date();
+  const canRate = Boolean(session && (isStudioOwner || isClient) && appointmentPassed && ['confirmed','completed'].includes(booking.status));
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      getBookingRating(booking.id),
+      isStudioOwner ? getClientRating(booking.client_id) : getStudioRating(booking.studio_id),
+    ]).then(([own, nextSummary]) => {
+      if (!active) return;
+      if (own) { setRating(own.rating); setComment(own.comment || ''); }
+      setSummary(nextSummary);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [booking.id, booking.client_id, booking.studio_id, isStudioOwner]);
+
+  async function submitRating() {
+    if (!rating) return notify('Choose a rating', 'Select between one and five stars.', 'info');
+    setSaving(true);
+    try {
+      await rateBooking(booking.id, targetType, rating, comment);
+      const next = isStudioOwner ? await getClientRating(booking.client_id) : await getStudioRating(booking.studio_id);
+      setSummary(next);
+      notify('Rating saved', 'Thank you for sharing a genuine appointment experience.', 'success');
+    } catch (e) { notify('Could not save rating', friendlyError(e), 'error'); } finally { setSaving(false); }
+  }
+
+  return <><Text style={styles.profileKicker}>{isStudioOwner ? 'CLIENT APPOINTMENT' : 'YOUR APPOINTMENT'}</Text><Text style={styles.title}>{booking.studios?.name || 'Appointment'}</Text>
+    <View style={styles.appointmentHeroCard}>
+      {booking.portfolio_looks?.image_url ? <Image source={{uri:booking.portfolio_looks.image_url}} style={styles.appointmentHeroImage}/> : <View style={styles.appointmentHeroFallback}><Text style={styles.appointmentHeroIcon}>▤</Text></View>}
+      <View style={{flex:1}}><Text style={styles.appointmentHeroDate}>{formatTime(booking.starts_at)}</Text><View style={styles.statusBadgeLarge}><Text style={styles.statusText}>{booking.status.toUpperCase()}</Text></View>{booking.portfolio_looks && <Text style={styles.appointmentDesignName}>{booking.portfolio_looks.title} · €{booking.portfolio_looks.price_eur}</Text>}</View>
+    </View>
+    <View style={styles.detailCard}><Text style={styles.detailLabel}>{isStudioOwner ? 'CLIENT' : 'STUDIO'}</Text><Text style={styles.detailValue}>{isStudioOwner ? booking.client_name : booking.studios?.name}</Text>{!isStudioOwner && booking.studios?.address && <Text style={styles.detailSub}>⌖ {booking.studios.address}, {booking.studios.city}</Text>}<View style={styles.ratingSummary}><Text style={styles.ratingSummaryStar}>★</Text><Text style={styles.ratingSummaryValue}>{summary.avg_rating == null ? 'New' : summary.avg_rating.toFixed(1)}</Text><Text style={styles.ratingSummaryCount}>{summary.rating_count ? `(${summary.rating_count} ratings)` : 'No ratings yet'}</Text></View></View>
+    {isStudioOwner && booking.status === 'requested' && <Button label="Confirm appointment" onPress={() => onStatus(booking.id,'confirmed')} />}
+    {(isStudioOwner || isClient) && ['requested','confirmed'].includes(booking.status) && <Button label="Cancel appointment" secondary onPress={() => onStatus(booking.id,'cancelled')} />}
+    {canRate ? <View style={styles.reviewCard}><Text style={styles.sectionSmall}>{isStudioOwner ? 'Rate this client' : 'Rate this studio'}</Text><Text style={styles.formSub}>Ratings are available after a confirmed appointment has started.</Text><StarRating value={rating} onChange={setRating}/><Field label="Review (optional)" value={comment} onChangeText={setComment} multiline placeholder="Share a short, respectful review"/><Button label={saving?'Saving…':rating?'Save rating':'Choose a rating'} onPress={submitRating} disabled={saving}/></View> : <View style={styles.ratingLocked}><Text style={styles.ratingLockedTitle}>Ratings unlock after the appointment</Text><Text style={styles.caption}>Both client and studio can rate each other after a confirmed appointment has started.</Text></View>}
+  </>;
+}
+
+function EditLookScreen({ look, onSaved, notify }: { look: Look; onSaved: (look: Look) => Promise<void>; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
+  const [title, setTitle] = useState(look.title);
+  const [price, setPrice] = useState(String(look.price_eur));
+  const [image, setImage] = useState<ImagePickerAsset | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    const numericPrice = Number(price);
+    if (!title.trim() || !Number.isFinite(numericPrice) || numericPrice < 0) return notify('Check design details', 'Add a design name and a valid price.', 'info');
+    setBusy(true);
+    try {
+      let updated = await updateLook(look.id, title, numericPrice);
+      if (image) updated = await replaceLookImage(updated, image);
+      await onSaved(updated);
+    } catch (e) { notify('Could not update design', friendlyError(e), 'error'); } finally { setBusy(false); }
+  }
+  return <><View style={styles.editScreenHead}><View><Text style={styles.profileKicker}>EDIT DESIGN</Text><Text style={styles.title}>Polish your look.</Text></View><View style={styles.editIconBadge}><Text style={styles.editIconBadgeText}>✎</Text></View></View><Pressable style={styles.editImageWrap} onPress={async()=>{try{setImage(await pickPortfolioImage())}catch(e){notify('Photo',friendlyError(e),'error')}}}><Image source={{uri:image?.uri || look.image_url}} style={styles.editImage}/><View style={styles.changeImagePill}><Text style={styles.changeImageText}>✎ Change photo</Text></View></Pressable><View style={styles.formCard}><Field label="Design name" value={title} onChangeText={setTitle} placeholder="Design name"/><Field label="Starting price (€)" value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="45"/><Button label={busy?'Saving changes…':'Save design changes'} onPress={save} disabled={busy}/></View></>;
+}
+
+function LegalScreen({ pageKey, onOpen, onDelete, notify }: { pageKey: LegalPageKey | 'account'; onOpen: (key: LegalPageKey | 'account') => void; onDelete: () => Promise<void>; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
+  const [busy, setBusy] = useState(false);
+  if (pageKey === 'account') {
+    const confirmDelete = () => Alert.alert('Delete your Nailly account?', 'This permanently removes your account, profile, studio data, portfolio images and associated account data. This action cannot be undone.', [{text:'Cancel',style:'cancel'},{text:'Delete account',style:'destructive',onPress:async()=>{setBusy(true);try{await onDelete();}catch(e){notify('Account deletion failed',friendlyError(e),'error');setBusy(false);}}}]);
+    return <><Text style={styles.profileKicker}>ACCOUNT & DATA</Text><Text style={styles.title}>Delete account</Text><View style={styles.deleteWarning}><Text style={styles.deleteWarningIcon}>!</Text><View style={{flex:1}}><Text style={styles.deleteWarningTitle}>Permanent action</Text><Text style={styles.deleteWarningText}>Deleting your account removes your Nailly identity and associated user-generated data that is not required to be retained by law.</Text></View></View><View style={styles.legalSection}><Text style={styles.legalHeading}>What is included</Text><Text style={styles.legalBody}>Profile information, profile photo, owned studio records, portfolio images, saved looks, appointment-linked account data, ratings and other account-associated records are included in the deletion flow.</Text></View><Button label={busy?'Deleting account…':'Delete my account and data'} onPress={confirmDelete} disabled={busy}/><Text style={styles.legalFootnote}>Store policies also require an external web route for account-deletion requests. A public URL must be configured before Google Play release.</Text></>;
+  }
+  const page = legalPages[pageKey];
+  return <><Text style={styles.profileKicker}>LEGAL & PRIVACY</Text><Text style={styles.title}>{page.title}</Text><Text style={styles.legalSubtitle}>{page.subtitle}</Text><Text style={styles.legalDate}>Effective 29 September 2026</Text>{page.sections.map(section=><View key={section.heading} style={styles.legalSection}><Text style={styles.legalHeading}>{section.heading}</Text><Text style={styles.legalBody}>{section.body}</Text></View>)}<View style={styles.legalQuickLinks}><Text style={styles.sectionSmall}>More</Text>{(['privacy','terms','gdpr','community'] as LegalPageKey[]).filter(k=>k!==pageKey).map(k=><Pressable key={k} style={styles.settingsRow} onPress={()=>onOpen(k)}><Text style={styles.settingsTitle}>{legalPages[k].title}</Text><Text style={styles.rowChevron}>›</Text></Pressable>)}</View></>;
+}
 
 function AuthScreen({ onDone }: { onDone: () => void }) {
   const [register, setRegister] = useState(false), [artist, setArtist] = useState(false), [busy, setBusy] = useState(false);
