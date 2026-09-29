@@ -14,10 +14,10 @@ create index if not exists look_embeddings_cosine_idx on public.look_embeddings 
 create or replace function public.match_nail_looks(query_embedding extensions.vector(512), result_limit integer default 30)
 returns table (look_id uuid, similarity double precision)
 language sql stable security definer set search_path = '' as $$
-  select e.look_id, (1 - (e.embedding <=> query_embedding))::double precision as similarity
+  select e.look_id, (1 - (e.embedding OPERATOR(extensions.<=>) query_embedding))::double precision as similarity
   from public.look_embeddings e join public.portfolio_looks l on l.id = e.look_id
   where l.published = true and e.model = 'ViT-B-32-laion2b_s34b_b79k'
-  order by e.embedding <=> query_embedding
+  order by e.embedding OPERATOR(extensions.<=>) query_embedding
   limit least(greatest(result_limit, 1), 50)
 $$;
 revoke all on function public.match_nail_looks(extensions.vector, integer) from public;
