@@ -5,7 +5,7 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from './src/supabase';
 import { indexLook, matchPhoto, matchingConfigured } from './src/matching';
-import { Booking, deleteMyAccount, friendlyError, getBookingRating, getClientRating, getStudioRating, getStudioRatings, listLooks, listSlots, looksByIds, Look, pickPortfolioImage, Profile, rateBooking, replaceLookImage, Slot, Studio, updateLook, uploadAvatar, uploadLook } from './src/api';
+import { Booking, deleteMyAccount, friendlyError, getBookingRating, getClientRating, getStudioRating, getStudioRatings, getStudioReviews, listLooks, listSlots, looksByIds, Look, pickPortfolioImage, Profile, rateBooking, replaceLookImage, Slot, Studio, updateLook, uploadAvatar, uploadLook } from './src/api';
 import { legalPages } from './src/legal';
 import type { LegalPageKey } from './src/legal';
 
@@ -209,6 +209,8 @@ function StarRating({ value, onChange }: { value: number; onChange: (value: numb
 function AppointmentScreen({ booking, session, onStatus, onRatingSaved, notify }: { booking: Booking; session: Session | null; onStatus: (id: string, status: 'confirmed' | 'cancelled') => Promise<void>; onRatingSaved: () => Promise<void>; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [savedReview, setSavedReview] = useState<{rating:number;comment:string} | null>(null);
+  const [studioReviews, setStudioReviews] = useState<{booking_id:string;rating:number;comment:string;created_at:string}[]>([]);
   const [summary, setSummary] = useState<{avg_rating:number|null;rating_count:number}>({avg_rating:null,rating_count:0});
   const [saving, setSaving] = useState(false);
   const isStudioOwner = Boolean(session && booking.studios?.owner_id === session.user.id);
@@ -222,23 +224,36 @@ function AppointmentScreen({ booking, session, onStatus, onRatingSaved, notify }
     Promise.all([
       getBookingRating(booking.id),
       isStudioOwner ? getClientRating(booking.client_id) : getStudioRating(booking.studio_id),
-    ]).then(([own, nextSummary]) => {
+      isStudioOwner ? Promise.resolve([]) : getStudioReviews(booking.studio_id, 5),
+    ]).then(([own, nextSummary, reviews]) => {
       if (!active) return;
-      if (own) { setRating(own.rating); setComment(own.comment || ''); }
+      if (own) {
+        setRating(own.rating);
+        setSavedReview({ rating: own.rating, comment: own.comment || '' });
+        setComment('');
+      } else {
+        setSavedReview(null);
+        setComment('');
+      }
       setSummary(nextSummary);
+      setStudioReviews(reviews);
     }).catch(() => undefined);
     return () => { active = false; };
   }, [booking.id, booking.client_id, booking.studio_id, isStudioOwner]);
 
   async function submitRating() {
     if (!rating) return notify('Choose a rating', 'Select between one and five stars.', 'info');
+    const reviewText = comment.trim() || savedReview?.comment || '';
     setSaving(true);
     try {
-      await rateBooking(booking.id, targetType, rating, comment);
+      await rateBooking(booking.id, targetType, rating, reviewText);
       const next = isStudioOwner ? await getClientRating(booking.client_id) : await getStudioRating(booking.studio_id);
       setSummary(next);
+      setSavedReview({ rating, comment: reviewText });
+      setComment('');
+      if (!isStudioOwner) setStudioReviews(await getStudioReviews(booking.studio_id, 5));
       await onRatingSaved();
-      notify('Rating saved', 'Thank you for sharing a genuine appointment experience.', 'success');
+      notify('Rating saved', reviewText ? 'Your rating and review are now attached to this studio.' : 'Your rating has been saved.', 'success');
     } catch (e) { notify('Could not save rating', friendlyError(e), 'error'); } finally { setSaving(false); }
   }
 
@@ -250,7 +265,7 @@ function AppointmentScreen({ booking, session, onStatus, onRatingSaved, notify }
     <View style={styles.detailCard}><Text style={styles.detailLabel}>{isStudioOwner ? 'CLIENT' : 'STUDIO'}</Text><Text style={styles.detailValue}>{isStudioOwner ? booking.client_name : booking.studios?.name}</Text>{!isStudioOwner && booking.studios?.address && <Text style={styles.detailSub}>⌖ {booking.studios.address}, {booking.studios.city}</Text>}<View style={styles.ratingSummary}><Text style={styles.ratingSummaryStar}>★</Text><Text style={styles.ratingSummaryValue}>{summary.avg_rating == null ? 'New' : summary.avg_rating.toFixed(1)}</Text><Text style={styles.ratingSummaryCount}>{summary.rating_count ? `(${summary.rating_count} ratings)` : 'No ratings yet'}</Text></View></View>
     {isStudioOwner && booking.status === 'requested' && <Button label="Confirm appointment" onPress={() => onStatus(booking.id,'confirmed')} />}
     {(isStudioOwner || isClient) && ['requested','confirmed'].includes(booking.status) && <Button label="Cancel appointment" secondary onPress={() => onStatus(booking.id,'cancelled')} />}
-    {canRate ? <View style={styles.reviewCard}><Text style={styles.sectionSmall}>{isStudioOwner ? 'Rate this client' : 'Rate this studio'}</Text><Text style={styles.formSub}>Ratings are available after a confirmed appointment has started.</Text><StarRating value={rating} onChange={setRating}/><Field label="Review (optional)" value={comment} onChangeText={setComment} multiline placeholder="Share a short, respectful review"/><Button label={saving?'Saving…':rating?'Save rating':'Choose a rating'} onPress={submitRating} disabled={saving}/></View> : <View style={styles.ratingLocked}><Text style={styles.ratingLockedTitle}>Ratings unlock after the appointment</Text><Text style={styles.caption}>Both client and studio can rate each other after a confirmed appointment has started.</Text></View>}
+    {canRate ? <><View style={styles.reviewCard}><Text style={styles.sectionSmall}>{isStudioOwner ? 'Rate this client' : 'Rate this studio'}</Text><Text style={styles.formSub}>Ratings are available after a confirmed appointment has started.</Text><StarRating value={rating} onChange={setRating}/><Field label={savedReview ? "Add or edit your review" : "Review (optional)"} value={comment} onChangeText={setComment} multiline placeholder={savedReview?.comment ? "Write a replacement review, or leave empty to keep the current one" : "Share a short, respectful review"}/><Button label={saving?'Saving…':savedReview?'Update rating':'Save rating'} onPress={submitRating} disabled={saving}/></View>{savedReview && <View style={styles.savedReviewCard}><View style={styles.savedReviewHead}><Text style={styles.savedReviewLabel}>YOUR REVIEW</Text><Pressable onPress={()=>setComment(savedReview.comment)}><Text style={styles.link}>Edit</Text></Pressable></View><View style={styles.savedReviewStars}><Text style={styles.savedReviewStar}>{'★'.repeat(savedReview.rating)}</Text><Text style={styles.savedReviewMutedStar}>{'★'.repeat(5-savedReview.rating)}</Text></View>{savedReview.comment ? <Text style={styles.savedReviewText}>“{savedReview.comment}”</Text> : <Text style={styles.caption}>You left a star rating without a written review.</Text>}</View>}{!isStudioOwner && studioReviews.length > 0 && <View style={styles.studioReviewsBlock}><View style={styles.profileSectionHead}><Text style={styles.sectionSmall}>Recent studio reviews</Text><Text style={styles.countBadge}>{summary.rating_count}</Text></View>{studioReviews.map(review=><View key={review.booking_id} style={styles.studioReviewRow}><View style={styles.studioReviewTop}><Text style={styles.studioReviewStars}>{'★'.repeat(review.rating)}<Text style={styles.studioReviewMuted}>{'★'.repeat(5-review.rating)}</Text></Text><Text style={styles.studioReviewDate}>{new Date(review.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</Text></View><Text style={styles.studioReviewText}>“{review.comment}”</Text><Text style={styles.studioReviewVerified}>Verified appointment</Text></View>)}</View>}</> : <View style={styles.ratingLocked}><Text style={styles.ratingLockedTitle}>Ratings unlock after the appointment</Text><Text style={styles.caption}>Both client and studio can rate each other after a confirmed appointment has started.</Text></View>}
   </>;
 }
 
@@ -489,6 +504,21 @@ const styles = StyleSheet.create({
   starButton: { paddingRight: 8, paddingVertical: 2 },
   star: { color: '#d7c9cf', fontSize: 34 },
   starActive: { color: '#d99a3e' },
+  savedReviewCard: { backgroundColor: '#fffaf0', borderWidth: 1, borderColor: '#f0dfbd', borderRadius: 20, padding: 16, marginTop: 10 },
+  savedReviewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  savedReviewLabel: { color: colors.coral, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  savedReviewStars: { flexDirection: 'row', marginTop: 9 },
+  savedReviewStar: { color: '#d99a3e', fontSize: 17 },
+  savedReviewMutedStar: { color: '#ded2c6', fontSize: 17 },
+  savedReviewText: { color: colors.ink, fontSize: 13, lineHeight: 20, marginTop: 9, fontStyle: 'italic' },
+  studioReviewsBlock: { marginTop: 24 },
+  studioReviewRow: { backgroundColor: 'white', borderWidth: 1, borderColor: colors.edge, borderRadius: 18, padding: 15, marginBottom: 9 },
+  studioReviewTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  studioReviewStars: { color: '#d99a3e', fontSize: 13, letterSpacing: 1 },
+  studioReviewMuted: { color: '#ded2c6' },
+  studioReviewDate: { color: colors.muted, fontSize: 10 },
+  studioReviewText: { color: colors.ink, fontSize: 12, lineHeight: 19, marginTop: 8 },
+  studioReviewVerified: { color: colors.coral, fontSize: 9, fontWeight: '800', marginTop: 8 },
   ratingLocked: { backgroundColor: colors.blush, borderRadius: 18, padding: 16, marginTop: 14 },
   ratingLockedTitle: { color: colors.ink, fontSize: 13, fontWeight: '800', marginBottom: 5 },
 
