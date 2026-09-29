@@ -88,14 +88,32 @@ export default function App() {
     const handleAuthUrl = async (url: string) => {
       try {
         const parsed = new URL(url);
-        const code = parsed.searchParams.get('code');
+        const hashParams = new URLSearchParams(parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash);
+        const getParam = (key: string) => parsed.searchParams.get(key) ?? hashParams.get(key);
+
+        const authError = getParam('error_description') || getParam('error');
+        if (authError) throw new Error(authError);
+
+        const code = getParam('code');
+        const accessToken = getParam('access_token');
+        const refreshToken = getParam('refresh_token');
+
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
-          setScreen('home');
-          setTab('Profile');
-          Alert.alert('Email confirmed', 'Your Nailly account is ready.');
+        } else if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) throw sessionError;
+        } else {
+          return;
         }
+
+        setScreen('home');
+        setTab('Profile');
+        Alert.alert('Email confirmed', 'Your Nailly account is ready.');
       } catch (e) {
         message('Email confirmation', e);
       }
@@ -356,7 +374,7 @@ function AuthScreen({ onDone }: { onDone: () => void }) {
     setBusy(true);
     try {
       if (register) {
-        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: 'nailly://auth/callback', data: { display_name: name.trim(), role: artist ? 'artist' : 'client' } } });
+        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: 'https://naillyapp.com/auth/callback/', data: { display_name: name.trim(), role: artist ? 'artist' : 'client' } } });
         if (error) throw error;
         if (!data.session) Alert.alert('Check your email', 'Confirm your email address, then sign in.'); else onDone();
       } else { const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }); if (error) throw error; onDone(); }
