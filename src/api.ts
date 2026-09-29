@@ -89,6 +89,20 @@ export async function rateBooking(bookingId: string, targetType: 'studio' | 'cli
   const { error } = await supabase.from('booking_ratings').upsert({ booking_id: bookingId, rater_id: auth.user.id, target_type: targetType, rating, comment: comment.trim() }, { onConflict: 'booking_id,rater_id' });
   if (error) throw error;
 }
+export async function getStudioRatings(studioIds: string[]): Promise<Record<string, RatingSummary>> {
+  const uniqueIds = [...new Set(studioIds.filter(Boolean))];
+  if (!uniqueIds.length) return {};
+  const { data, error } = await supabase.rpc('studio_ratings_for_ids', { for_studios: uniqueIds });
+  if (error) throw error;
+  const result: Record<string, RatingSummary> = {};
+  for (const row of data || []) {
+    result[row.studio_id] = {
+      avg_rating: row.avg_rating == null ? null : Number(row.avg_rating),
+      rating_count: Number(row.rating_count || 0),
+    };
+  }
+  return result;
+}
 export async function getStudioRating(studioId: string): Promise<RatingSummary> {
   const { data, error } = await supabase.rpc('studio_rating', { for_studio: studioId }).single();
   if (error) throw error;
