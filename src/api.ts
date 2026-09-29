@@ -4,20 +4,20 @@ import { supabase } from './supabase';
 
 export type Profile = { id: string; display_name: string; role: 'client' | 'artist'; avatar_url: string | null; city: string | null; bio: string };
 export type Studio = { id: string; owner_id: string; name: string; city: string; address: string | null; bio: string; phone: string | null };
-export type Look = { id: string; studio_id: string; title: string; image_url: string; price_eur: number; studios: Studio };
+export type Look = { id: string; studio_id: string; title: string; image_url: string; storage_path: string | null; price_eur: number; studios: Studio };
 export type Slot = { id: string; studio_id: string; starts_at: string; ends_at: string };
 export type Booking = { id: string; studio_id: string; client_id: string; client_name: string; slot_id: string; look_id: string | null; starts_at: string; status: string; studios: Studio; portfolio_looks?: { id: string; title: string; image_url: string; price_eur: number } | null };
 export type RatingSummary = { avg_rating: number | null; rating_count: number };
 export type BookingRating = { id: string; booking_id: string; rater_id: string; target_type: 'studio' | 'client'; rating: number; comment: string };
 
 export async function listLooks(): Promise<Look[]> {
-  const { data, error } = await supabase.from('portfolio_looks').select('id,studio_id,title,image_url,price_eur,studios(id,owner_id,name,city,address,bio,phone)').eq('published', true).order('created_at', { ascending: false }).limit(100);
+  const { data, error } = await supabase.from('portfolio_looks').select('id,studio_id,title,image_url,storage_path,price_eur,studios(id,owner_id,name,city,address,bio,phone)').eq('published', true).order('created_at', { ascending: false }).limit(100);
   if (error) throw error;
   return (data || []) as unknown as Look[];
 }
 export async function looksByIds(ids: string[]): Promise<Look[]> {
   if (!ids.length) return [];
-  const { data, error } = await supabase.from('portfolio_looks').select('id,studio_id,title,image_url,price_eur,studios(id,owner_id,name,city,address,bio,phone)').eq('published', true).in('id', ids);
+  const { data, error } = await supabase.from('portfolio_looks').select('id,studio_id,title,image_url,storage_path,price_eur,studios(id,owner_id,name,city,address,bio,phone)').eq('published', true).in('id', ids);
   if (error) throw error;
   const byId = new Map((data || []).map((look: any) => [look.id, look]));
   return ids.map(id => byId.get(id)).filter(Boolean) as Look[];
@@ -56,8 +56,22 @@ export async function uploadLook(studioId: string, title: string, price: number,
   }
   return created.id as string;
 }
+export async function replaceLookImage(look: Look, asset: ImagePicker.ImagePickerAsset) {
+  if (!asset.base64) throw new Error('Could not read the selected image.');
+  const file = `${look.studio_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const { error: uploadError } = await supabase.storage.from('portfolio').upload(file, decode(asset.base64), { contentType: 'image/jpeg', upsert: false });
+  if (uploadError) throw uploadError;
+  const { data } = supabase.storage.from('portfolio').getPublicUrl(file);
+  const { data: updated, error } = await supabase.from('portfolio_looks').update({ image_url: data.publicUrl, storage_path: file }).eq('id', look.id).select('id,studio_id,title,image_url,storage_path,price_eur,studios(id,owner_id,name,city,address,bio,phone)').single();
+  if (error) {
+    await supabase.storage.from('portfolio').remove([file]);
+    throw error;
+  }
+  if (look.storage_path && look.storage_path !== file) await supabase.storage.from('portfolio').remove([look.storage_path]).catch(() => undefined);
+  return updated as unknown as Look;
+}
 export async function updateLook(lookId: string, title: string, price: number) {
-  const { data, error } = await supabase.from('portfolio_looks').update({ title: title.trim(), price_eur: price }).eq('id', lookId).select('id,studio_id,title,image_url,price_eur,studios(id,owner_id,name,city,address,bio,phone)').single();
+  const { data, error } = await supabase.from('portfolio_looks').update({ title: title.trim(), price_eur: price }).eq('id', lookId).select('id,studio_id,title,image_url,storage_path,price_eur,studios(id,owner_id,name,city,address,bio,phone)').single();
   if (error) throw error;
   return data as unknown as Look;
 }
