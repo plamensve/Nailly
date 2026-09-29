@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -213,6 +213,9 @@ function AppointmentScreen({ booking, session, onStatus, onRatingSaved, notify }
   const [studioReviews, setStudioReviews] = useState<{booking_id:string;rating:number;comment:string;created_at:string}[]>([]);
   const [summary, setSummary] = useState<{avg_rating:number|null;rating_count:number}>({avg_rating:null,rating_count:0});
   const [saving, setSaving] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editRating, setEditRating] = useState(0);
+  const [editComment, setEditComment] = useState('');
   const isStudioOwner = Boolean(session && booking.studios?.owner_id === session.user.id);
   const isClient = Boolean(session && booking.client_id === session.user.id);
   const targetType: 'studio' | 'client' = isStudioOwner ? 'client' : 'studio';
@@ -257,6 +260,31 @@ function AppointmentScreen({ booking, session, onStatus, onRatingSaved, notify }
     } catch (e) { notify('Could not save rating', friendlyError(e), 'error'); } finally { setSaving(false); }
   }
 
+  function openReviewEditor() {
+    if (!savedReview) return;
+    setEditRating(savedReview.rating);
+    setEditComment(savedReview.comment);
+    setEditOpen(true);
+  }
+
+  async function saveEditedReview() {
+    if (!editRating) return notify('Choose a rating', 'Select between one and five stars.', 'info');
+    setSaving(true);
+    try {
+      const reviewText = editComment.trim();
+      await rateBooking(booking.id, targetType, editRating, reviewText);
+      const next = isStudioOwner ? await getClientRating(booking.client_id) : await getStudioRating(booking.studio_id);
+      setSummary(next);
+      setRating(editRating);
+      setSavedReview({ rating: editRating, comment: reviewText });
+      setComment('');
+      if (!isStudioOwner) setStudioReviews(await getStudioReviews(booking.studio_id, 5));
+      await onRatingSaved();
+      setEditOpen(false);
+      notify('Review updated', 'Your changes have been saved.', 'success');
+    } catch (e) { notify('Could not update review', friendlyError(e), 'error'); } finally { setSaving(false); }
+  }
+
   return <><Text style={styles.profileKicker}>{isStudioOwner ? 'CLIENT APPOINTMENT' : 'YOUR APPOINTMENT'}</Text><Text style={styles.title}>{booking.studios?.name || 'Appointment'}</Text>
     <View style={styles.appointmentHeroCard}>
       {booking.portfolio_looks?.image_url ? <Image source={{uri:booking.portfolio_looks.image_url}} style={styles.appointmentHeroImage}/> : <View style={styles.appointmentHeroFallback}><Text style={styles.appointmentHeroIcon}>▤</Text></View>}
@@ -265,7 +293,7 @@ function AppointmentScreen({ booking, session, onStatus, onRatingSaved, notify }
     <View style={styles.detailCard}><Text style={styles.detailLabel}>{isStudioOwner ? 'CLIENT' : 'STUDIO'}</Text><Text style={styles.detailValue}>{isStudioOwner ? booking.client_name : booking.studios?.name}</Text>{!isStudioOwner && booking.studios?.address && <Text style={styles.detailSub}>⌖ {booking.studios.address}, {booking.studios.city}</Text>}<View style={styles.ratingSummary}><Text style={styles.ratingSummaryStar}>★</Text><Text style={styles.ratingSummaryValue}>{summary.avg_rating == null ? 'New' : summary.avg_rating.toFixed(1)}</Text><Text style={styles.ratingSummaryCount}>{summary.rating_count ? `(${summary.rating_count} ratings)` : 'No ratings yet'}</Text></View></View>
     {isStudioOwner && booking.status === 'requested' && <Button label="Confirm appointment" onPress={() => onStatus(booking.id,'confirmed')} />}
     {(isStudioOwner || isClient) && ['requested','confirmed'].includes(booking.status) && <Button label="Cancel appointment" secondary onPress={() => onStatus(booking.id,'cancelled')} />}
-    {canRate ? <><View style={styles.reviewCard}><Text style={styles.sectionSmall}>{isStudioOwner ? 'Rate this client' : 'Rate this studio'}</Text><Text style={styles.formSub}>Ratings are available after a confirmed appointment has started.</Text><StarRating value={rating} onChange={setRating}/><Field label={savedReview ? "Add or edit your review" : "Review (optional)"} value={comment} onChangeText={setComment} multiline placeholder={savedReview?.comment ? "Write a replacement review, or leave empty to keep the current one" : "Share a short, respectful review"}/><Button label={saving?'Saving…':savedReview?'Update rating':'Save rating'} onPress={submitRating} disabled={saving}/></View>{savedReview && <View style={styles.savedReviewCard}><View style={styles.savedReviewHead}><Text style={styles.savedReviewLabel}>YOUR REVIEW</Text><Pressable onPress={()=>setComment(savedReview.comment)}><Text style={styles.link}>Edit</Text></Pressable></View><View style={styles.savedReviewStars}><Text style={styles.savedReviewStar}>{'★'.repeat(savedReview.rating)}</Text><Text style={styles.savedReviewMutedStar}>{'★'.repeat(5-savedReview.rating)}</Text></View>{savedReview.comment ? <Text style={styles.savedReviewText}>“{savedReview.comment}”</Text> : <Text style={styles.caption}>You left a star rating without a written review.</Text>}</View>}{!isStudioOwner && studioReviews.length > 0 && <View style={styles.studioReviewsBlock}><View style={styles.profileSectionHead}><Text style={styles.sectionSmall}>Recent studio reviews</Text><Text style={styles.countBadge}>{summary.rating_count}</Text></View>{studioReviews.map(review=><View key={review.booking_id} style={styles.studioReviewRow}><View style={styles.studioReviewTop}><Text style={styles.studioReviewStars}>{'★'.repeat(review.rating)}<Text style={styles.studioReviewMuted}>{'★'.repeat(5-review.rating)}</Text></Text><Text style={styles.studioReviewDate}>{new Date(review.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</Text></View><Text style={styles.studioReviewText}>“{review.comment}”</Text><Text style={styles.studioReviewVerified}>Verified appointment</Text></View>)}</View>}</> : <View style={styles.ratingLocked}><Text style={styles.ratingLockedTitle}>Ratings unlock after the appointment</Text><Text style={styles.caption}>Both client and studio can rate each other after a confirmed appointment has started.</Text></View>}
+    {canRate ? <>{!savedReview ? <View style={styles.reviewCard}><Text style={styles.sectionSmall}>{isStudioOwner ? 'Rate this client' : 'Rate this studio'}</Text><Text style={styles.formSub}>Ratings are available after a confirmed appointment has started.</Text><StarRating value={rating} onChange={setRating}/><Field label="Review (optional)" value={comment} onChangeText={setComment} multiline placeholder="Share a short, respectful review"/><Button label={saving?'Saving…':rating?'Save rating':'Choose a rating'} onPress={submitRating} disabled={saving}/></View> : <View style={styles.savedReviewCard}><View style={styles.savedReviewHead}><View><Text style={styles.savedReviewLabel}>YOUR REVIEW</Text><Text style={styles.savedReviewHint}>Saved and visible with this studio rating</Text></View><Pressable style={styles.editReviewButton} onPress={openReviewEditor}><Text style={styles.editReviewButtonIcon}>✎</Text><Text style={styles.editReviewButtonText}>Edit review</Text></Pressable></View><View style={styles.savedReviewStars}><Text style={styles.savedReviewStar}>{'★'.repeat(savedReview.rating)}</Text><Text style={styles.savedReviewMutedStar}>{'★'.repeat(5-savedReview.rating)}</Text></View>{savedReview.comment ? <Text style={styles.savedReviewText}>“{savedReview.comment}”</Text> : <Text style={styles.caption}>You left a star rating without a written review.</Text>}</View>}{!isStudioOwner && studioReviews.length > 0 && <View style={styles.studioReviewsBlock}><View style={styles.profileSectionHead}><Text style={styles.sectionSmall}>Recent studio reviews</Text><Text style={styles.countBadge}>{summary.rating_count}</Text></View>{studioReviews.map(review=><View key={review.booking_id} style={styles.studioReviewRow}><View style={styles.studioReviewTop}><Text style={styles.studioReviewStars}>{'★'.repeat(review.rating)}<Text style={styles.studioReviewMuted}>{'★'.repeat(5-review.rating)}</Text></Text><Text style={styles.studioReviewDate}>{new Date(review.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</Text></View><Text style={styles.studioReviewText}>“{review.comment}”</Text><Text style={styles.studioReviewVerified}>Verified appointment</Text></View>)}</View>}<Modal visible={editOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={()=>!saving&&setEditOpen(false)}><KeyboardAvoidingView style={styles.reviewModalRoot} behavior={Platform.OS==='ios'?'padding':'height'}><Pressable style={styles.reviewModalBackdrop} onPress={()=>!saving&&setEditOpen(false)}><Pressable style={styles.reviewModalCard} onPress={()=>{}}><View style={styles.reviewModalHandle}/><View style={styles.reviewModalHeader}><View style={styles.reviewModalIcon}><Text style={styles.reviewModalIconText}>✎</Text></View><View style={{flex:1}}><Text style={styles.reviewModalTitle}>Edit your review</Text><Text style={styles.reviewModalSubtitle}>Update your stars or written feedback</Text></View><Pressable onPress={()=>!saving&&setEditOpen(false)} style={styles.reviewModalClose}><Text style={styles.reviewModalCloseText}>×</Text></Pressable></View><Text style={styles.reviewModalLabel}>Your rating</Text><StarRating value={editRating} onChange={setEditRating}/><Text style={styles.reviewModalLabel}>Your review</Text><TextInput value={editComment} onChangeText={setEditComment} placeholder="Share your experience" placeholderTextColor="#ad9ca5" multiline autoFocus style={styles.reviewModalInput}/><View style={styles.reviewModalActions}><Pressable disabled={saving} onPress={()=>setEditOpen(false)} style={styles.reviewModalCancel}><Text style={styles.reviewModalCancelText}>Cancel</Text></Pressable><Pressable disabled={saving} onPress={saveEditedReview} style={[styles.reviewModalSave,saving&&{opacity:.55}]}><Text style={styles.reviewModalSaveText}>{saving?'Saving…':'Save changes'}</Text></Pressable></View></Pressable></Pressable></KeyboardAvoidingView></Modal></> : <View style={styles.ratingLocked}><Text style={styles.ratingLockedTitle}>Ratings unlock after the appointment</Text><Text style={styles.caption}>Both client and studio can rate each other after a confirmed appointment has started.</Text></View>}
   </>;
 }
 
@@ -507,6 +535,10 @@ const styles = StyleSheet.create({
   savedReviewCard: { backgroundColor: '#fffaf0', borderWidth: 1, borderColor: '#f0dfbd', borderRadius: 20, padding: 16, marginTop: 10 },
   savedReviewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   savedReviewLabel: { color: colors.coral, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  savedReviewHint: { color: colors.muted, fontSize: 9, marginTop: 3 },
+  editReviewButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.blush, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, marginLeft: 10 },
+  editReviewButtonIcon: { color: colors.coral, fontSize: 13, fontWeight: '900', marginRight: 5 },
+  editReviewButtonText: { color: colors.coral, fontSize: 10, fontWeight: '900' },
   savedReviewStars: { flexDirection: 'row', marginTop: 9 },
   savedReviewStar: { color: '#d99a3e', fontSize: 17 },
   savedReviewMutedStar: { color: '#ded2c6', fontSize: 17 },
@@ -519,6 +551,24 @@ const styles = StyleSheet.create({
   studioReviewDate: { color: colors.muted, fontSize: 10 },
   studioReviewText: { color: colors.ink, fontSize: 12, lineHeight: 19, marginTop: 8 },
   studioReviewVerified: { color: colors.coral, fontSize: 9, fontWeight: '800', marginTop: 8 },
+  reviewModalRoot: { flex: 1 },
+  reviewModalBackdrop: { flex: 1, backgroundColor: 'rgba(38,20,31,0.45)', justifyContent: 'flex-end' },
+  reviewModalCard: { backgroundColor: colors.canvas, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 28, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: -6 }, elevation: 18 },
+  reviewModalHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: '#d8cbd1', alignSelf: 'center', marginBottom: 18 },
+  reviewModalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  reviewModalIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.blush, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  reviewModalIconText: { color: colors.coral, fontSize: 19, fontWeight: '900' },
+  reviewModalTitle: { color: colors.ink, fontSize: 19, fontWeight: '900' },
+  reviewModalSubtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  reviewModalClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.edge, marginLeft: 8 },
+  reviewModalCloseText: { color: colors.muted, fontSize: 22, lineHeight: 23 },
+  reviewModalLabel: { color: colors.ink, fontSize: 12, fontWeight: '800', marginTop: 4 },
+  reviewModalInput: { minHeight: 120, maxHeight: 190, borderWidth: 1, borderColor: colors.edge, backgroundColor: 'white', borderRadius: 16, padding: 14, fontSize: 14, lineHeight: 20, color: colors.ink, textAlignVertical: 'top', marginTop: 8 },
+  reviewModalActions: { flexDirection: 'row', marginTop: 16, marginHorizontal: -5 },
+  reviewModalCancel: { flex: 1, marginHorizontal: 5, borderRadius: 15, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.blush },
+  reviewModalCancelText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
+  reviewModalSave: { flex: 1.35, marginHorizontal: 5, borderRadius: 15, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.coral },
+  reviewModalSaveText: { color: 'white', fontSize: 13, fontWeight: '900' },
   ratingLocked: { backgroundColor: colors.blush, borderRadius: 18, padding: 16, marginTop: 14 },
   ratingLockedTitle: { color: colors.ink, fontSize: 13, fontWeight: '800', marginBottom: 5 },
 
