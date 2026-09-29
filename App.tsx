@@ -4,7 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { supabase } from './src/supabase';
 import { indexLook, matchPhoto, matchingConfigured } from './src/matching';
-import { Booking, friendlyError, listLooks, listSlots, looksByIds, Look, pickPortfolioImage, Slot, Studio, uploadLook } from './src/api';
+import { Booking, friendlyError, listLooks, listSlots, looksByIds, Look, pickPortfolioImage, Profile, Slot, Studio, uploadAvatar, uploadLook } from './src/api';
 
 const colors = { ink: '#452638', muted: '#877582', coral: '#ec817a', blush: '#fce8e4', canvas: '#fffaf7', edge: '#f2e6e3' };
 const tabNames = ['Discover', 'Saved', 'Bookings', 'Profile'] as const;
@@ -18,6 +18,9 @@ function Button({ label, onPress, secondary, disabled }: { label: string; onPres
 function Field({ label, value, onChangeText, placeholder, secureTextEntry, keyboardType, multiline }: { label: string; value: string; onChangeText: (text: string) => void; placeholder?: string; secureTextEntry?: boolean; keyboardType?: 'email-address' | 'numeric' | 'default'; multiline?: boolean }) {
   return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="#ad9ca5" secureTextEntry={secureTextEntry} keyboardType={keyboardType} autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'} multiline={multiline} style={[styles.input, multiline && { height: 90, textAlignVertical: 'top' }]} /></View>;
 }
+function Toast({ title, detail, type = 'success', onClose }: { title: string; detail: string; type?: 'success' | 'error' | 'info'; onClose: () => void }) {
+  return <Pressable onPress={onClose} style={[styles.toast, type === 'error' && styles.toastError, type === 'info' && styles.toastInfo]}><View style={styles.toastIcon}><Text style={styles.toastIconText}>{type === 'success' ? '✓' : type === 'error' ? '!' : 'i'}</Text></View><View style={{ flex: 1 }}><Text style={styles.toastTitle}>{title}</Text><Text style={styles.toastDetail}>{detail}</Text></View><Text style={styles.toastClose}>×</Text></Pressable>;
+}
 function LookCard({ look, favorite, saved, onPress }: { look: Look; favorite: () => void; saved: boolean; onPress: () => void }) {
   return <Pressable style={styles.card} onPress={onPress}><Image source={{ uri: look.image_url }} style={styles.cardImage} /><Pressable style={styles.heart} onPress={favorite}><Text style={styles.heartText}>{saved ? '♥' : '♡'}</Text></Pressable><View style={styles.cardBody}><Text numberOfLines={1} style={styles.cardTitle}>{look.title}</Text><Text numberOfLines={1} style={styles.caption}>{look.studios.name}</Text><View style={styles.between}><Text style={styles.tiny}>⌖ {look.studios.city}</Text><Text style={styles.price}>€{look.price_eur}</Text></View></View></Pressable>;
 }
@@ -25,6 +28,8 @@ function LookCard({ look, favorite, saved, onPress }: { look: Look; favorite: ()
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<'client' | 'artist'>('client');
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [toast, setToast] = useState<{title:string;detail:string;type?:'success'|'error'|'info'} | null>(null);
   const [tab, setTab] = useState<Tab>('Discover');
   const [screen, setScreen] = useState<'home' | 'results' | 'look' | 'auth' | 'studio'>('home');
   const [looks, setLooks] = useState<Look[]>([]);
@@ -48,7 +53,7 @@ export default function App() {
           supabase.from('saved_looks').select('look_id').eq('user_id', userId),
           supabase.from('bookings').select('id,studio_id,client_id,client_name,slot_id,starts_at,status,studios(id,owner_id,name,city,address,bio,phone)').order('starts_at', { ascending: false }),
           supabase.from('studios').select('id,owner_id,name,city,address,bio,phone').eq('owner_id', userId).maybeSingle(),
-          supabase.from('profiles').select('role').eq('id', userId).maybeSingle(),
+          supabase.from('profiles').select('id,display_name,role,avatar_url,city,bio').eq('id', userId).maybeSingle(),
         ]);
         if (savedResult.error) throw savedResult.error;
         if (bookingsResult.error) throw bookingsResult.error;
@@ -56,10 +61,11 @@ export default function App() {
         if (profileResult.error) throw profileResult.error;
         const accountRole = profileResult.data?.role || session?.user.user_metadata?.role || 'client';
         setRole(accountRole === 'artist' ? 'artist' : 'client');
+        setProfile(profileResult.data as Profile | null);
         setSaved((savedResult.data || []).map(x => x.look_id));
         setBookings((bookingsResult.data || []) as unknown as Booking[]);
         setStudio(studioResult.data as Studio | null);
-      } else { setSaved([]); setBookings([]); setStudio(null); setRole('client'); }
+      } else { setSaved([]); setBookings([]); setStudio(null); setRole('client'); setProfile(null); }
     } catch (e) { setError(friendlyError(e)); }
   }, []);
   useEffect(() => {
@@ -130,15 +136,15 @@ export default function App() {
   return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     {screen !== 'home' && <Pressable onPress={() => setScreen('home')}><Text style={styles.back}>‹ Back</Text></Pressable>}
     {screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} />
-    : screen === 'studio' ? <StudioScreen session={session} studio={studio} looks={looks} bookings={bookings} onRefresh={() => refresh(session?.user.id)} />
+    : screen === 'studio' ? <StudioScreen session={session} studio={studio} looks={looks} bookings={bookings} onRefresh={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} onStudioCreated={async () => { await refresh(session?.user.id); setToast({title:'Studio created',detail:'Your studio is live. Add your first design or available appointment.',type:'success'}); }} />
     : screen === 'look' && selected ? <><Image source={{ uri: selected.image_url }} style={styles.heroImage} /><Text style={styles.eyebrow}>NAIL STUDIO · {selected.studios.city.toUpperCase()}</Text><Text style={styles.title}>{selected.studios.name}</Text><Text style={styles.body}>{selected.studios.bio || 'Discover the artist behind this look.'}</Text><View style={styles.pill}><Text style={styles.pillText}>✦ {selected.title}  ·  From €{selected.price_eur}</Text></View><Text style={styles.section}>Available appointments</Text>{slots.length ? slots.map(slot => <Pressable key={slot.id} style={styles.slot} onPress={() => requestBooking(slot)} disabled={busy}><Text style={styles.slotText}>{formatTime(slot.starts_at)}</Text><Text style={styles.link}>{busy ? 'Please wait' : 'Request →'}</Text></Pressable>) : <Text style={styles.body}>No free times listed yet.</Text>}{selected.studios.address && <Text style={styles.body}>⌖ {selected.studios.address}, {selected.studios.city}</Text>}</>
     : screen === 'results' ? <><Text style={styles.eyebrow}>YOUR INSPIRATION</Text><Text style={styles.title}>Find your look.</Text>{photo && <Pressable style={styles.uploaded} onPress={choosePhoto}><Image source={{ uri: photo }} style={styles.thumb} /><Text style={styles.cardTitle}>Your photo  ·  Change</Text></Pressable>}<Text style={styles.section}>Studio work</Text><Text style={styles.body}>{matchState}</Text>{grid(matchedLooks.length ? matchedLooks : looks)}</>
     : tab === 'Discover' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.eyebrow}>YOUR NEXT NAIL MOMENT</Text><Text style={styles.headline}>Find the nails{'\n'}you love.</Text><Text style={styles.body}>From inspiration to the artist who can make it yours.</Text><Pressable style={styles.upload} onPress={choosePhoto}><Text style={styles.camera}>▧</Text><View><Text style={styles.cardTitle}>Upload inspiration</Text><Text style={styles.caption}>Choose a photo from your gallery</Text></View></Pressable><Text style={styles.section}>Explore nail looks</Text><TextInput value={query} onChangeText={setQuery} placeholder="Search design, studio or city" placeholderTextColor="#ad9ca5" style={[styles.input, { marginBottom: 20 }]} />{looks.length ? grid(filteredLooks) : <Empty title="The gallery is growing" detail="Studios will appear here once they publish their first designs." />}</>
     : tab === 'Saved' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Saved looks</Text>{!session ? <Button label="Sign in to save looks" onPress={() => setScreen('auth')} /> : saved.length ? grid(looks.filter(look => saved.includes(look.id))) : <Empty title="Your collection starts here" detail="Tap the heart on a nail look to save it." />}</>
     : tab === 'Bookings' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Appointments</Text>{!session ? <Button label="Sign in to view bookings" onPress={() => setScreen('auth')} /> : bookings.filter(b => b.client_id === session.user.id).length ? bookings.filter(b => b.client_id === session.user.id).map(b => <View key={b.id} style={styles.panel}><Text style={styles.cardTitle}>{b.studios?.name || 'Nail studio'}</Text><Text style={styles.body}>{formatTime(b.starts_at)}  ·  {b.status}</Text>{b.status !== 'cancelled' && <Button label="Cancel request" secondary onPress={() => changeBooking(b.id, 'cancelled')} />}</View>) : <Empty title="Nothing booked yet" detail="Choose a studio and request an available time." />}</>
-    : <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Your space</Text>{session ? <><Text style={styles.body}>{session.user.user_metadata?.display_name || 'Nailly member'} · {session.user.email}</Text>{role === 'artist' ? <Button label={studio ? 'Manage your studio' : 'Create your studio'} onPress={() => setScreen('studio')} /> : <><View style={styles.panel}><Text style={styles.cardTitle}>Client profile</Text><Text style={styles.body}>Discover nail designs, save your favorites and book appointments with Nailly studios.</Text></View><Button label="Explore nail looks" onPress={() => { setTab('Discover'); setScreen('home'); }} /><Button label="My saved looks" secondary onPress={() => { setTab('Saved'); setScreen('home'); }} /><Button label="My appointments" secondary onPress={() => { setTab('Bookings'); setScreen('home'); }} /></>}<Button label="Sign out" secondary onPress={() => supabase.auth.signOut()} /></> : <><Empty title="Welcome to Nailly" detail="Sign in as a client or create an artist account to show your work." /><Button label="Sign in or create account" onPress={() => setScreen('auth')} /></>}</>}
+    : <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Your space</Text>{session ? <><View style={styles.profileHero}><Pressable onPress={async () => { try { const asset = await pickPortfolioImage(); if (!asset) return; await uploadAvatar(session.user.id, asset); await refresh(session.user.id); setToast({title:'Profile photo updated',detail:'Your new photo is now part of your Nailly profile.',type:'success'}); } catch(e) { setToast({title:'Photo upload failed',detail:friendlyError(e),type:'error'}); } }}>{profile?.avatar_url ? <Image source={{uri:profile.avatar_url}} style={styles.avatar} /> : <View style={styles.avatarFallback}><Text style={styles.avatarLetter}>{(profile?.display_name || session.user.email || 'N').charAt(0).toUpperCase()}</Text></View>}<View style={styles.avatarEdit}><Text style={styles.avatarEditText}>＋</Text></View></Pressable><View style={{flex:1}}><Text style={styles.profileName}>{profile?.display_name || session.user.user_metadata?.display_name || 'Nailly member'}</Text><Text style={styles.caption}>{role === 'artist' ? 'Nail artist' : 'Client'} · {session.user.email}</Text><Text style={styles.profileHint}>Tap your photo to change it</Text></View></View>{role === 'artist' ? <Button label={studio ? 'Manage your studio' : 'Create your studio'} onPress={() => setScreen('studio')} /> : <><View style={styles.panel}><Text style={styles.cardTitle}>Client profile</Text><Text style={styles.body}>Discover nail designs, save your favorites and book appointments with Nailly studios.</Text></View><Button label="Explore nail looks" onPress={() => { setTab('Discover'); setScreen('home'); }} /><Button label="My saved looks" secondary onPress={() => { setTab('Saved'); setScreen('home'); }} /><Button label="My appointments" secondary onPress={() => { setTab('Bookings'); setScreen('home'); }} /></>}<Button label="Sign out" secondary onPress={() => supabase.auth.signOut()} /></> : <><Empty title="Welcome to Nailly" detail="Sign in as a client or create an artist account to show your work." /><Button label="Sign in or create account" onPress={() => setScreen('auth')} /></>}</>}
     {!!error && <View style={styles.notice}><Text style={styles.noticeText}>Data connection: {error}</Text><Button label="Try again" secondary onPress={() => refresh(session?.user.id)} /></View>}
-  </ScrollView><View style={styles.nav}>{tabNames.map((name, i) => <Pressable key={name} onPress={() => selectTab(name)} style={styles.navItem}><Text style={[styles.navIcon, tab === name && styles.active]}>{['⌕','♡','▤','◯'][i]}</Text><Text style={[styles.navLabel, tab === name && styles.active]}>{name}</Text></Pressable>)}</View></SafeAreaView>;
+  </ScrollView>{toast && <View style={styles.toastWrap}><Toast title={toast.title} detail={toast.detail} type={toast.type} onClose={() => setToast(null)} /></View>}<View style={styles.nav}>{tabNames.map((name, i) => <Pressable key={name} onPress={() => selectTab(name)} style={styles.navItem}><Text style={[styles.navIcon, tab === name && styles.active]}>{['⌕','♡','▤','◯'][i]}</Text><Text style={[styles.navLabel, tab === name && styles.active]}>{name}</Text></Pressable>)}</View></SafeAreaView>;
 }
 
 function Empty({ title, detail }: { title: string; detail: string }) { return <View style={styles.empty}><Text style={styles.emptyIcon}>✳</Text><Text style={styles.section}>{title}</Text><Text style={styles.body}>{detail}</Text></View>; }
@@ -163,7 +169,7 @@ function AuthScreen({ onDone }: { onDone: () => void }) {
     <Button label={busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} /><Button label={register ? 'I already have an account' : 'Create a new account'} secondary onPress={() => setRegister(!register)} /></>;
 }
 
-function StudioScreen({ session, studio, looks, bookings, onRefresh }: { session: Session | null; studio: Studio | null; looks: Look[]; bookings: Booking[]; onRefresh: () => Promise<void> }) {
+function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onStudioCreated }: { session: Session | null; studio: Studio | null; looks: Look[]; bookings: Booking[]; onRefresh: () => Promise<void>; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void; onStudioCreated: () => Promise<void> }) {
   const [name, setName] = useState(studio?.name || ''), [city, setCity] = useState(studio?.city || ''), [address, setAddress] = useState(studio?.address || ''), [bio, setBio] = useState(studio?.bio || ''), [phone, setPhone] = useState(studio?.phone || '');
   const [title, setTitle] = useState(''), [price, setPrice] = useState(''), [image, setImage] = useState<ImagePickerAsset | null>(null);
   const [date, setDate] = useState(''), [time, setTime] = useState(''), [busy, setBusy] = useState(false), [mySlots, setMySlots] = useState<Slot[]>([]);
@@ -173,12 +179,12 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh }: { session
     setBusy(true);
     const payload = { name: name.trim(), city: city.trim(), address: address.trim() || null, bio: bio.trim(), phone: phone.trim() || null };
     const { error } = studio ? await supabase.from('studios').update(payload).eq('id', studio.id) : await supabase.from('studios').insert({ ...payload, owner_id: session.user.id });
-    setBusy(false); if (error) message('Studio', error); else { Alert.alert('Saved', 'Your studio is ready.'); await onRefresh(); }
+    setBusy(false); if (error) notify('Could not save studio', friendlyError(error), 'error'); else if (!studio) { await onStudioCreated(); } else { await onRefresh(); notify('Studio updated', 'Your studio information has been saved.', 'success'); }
   }
   async function addLook() {
     if (!studio || !image || !title.trim() || !price.trim() || !Number.isFinite(Number(price)) || Number(price) < 0) return Alert.alert('Portfolio', 'Add a photo, title and valid price in euros.');
     setBusy(true);
-    try { const lookId = await uploadLook(studio.id, title.trim(), Number(price), image); if (matchingConfigured()) { try { await indexLook(lookId); } catch (indexError) { Alert.alert('Design published', `Visual indexing is pending: ${friendlyError(indexError)}`); } } setImage(null); setTitle(''); setPrice(''); await onRefresh(); Alert.alert('Published', 'Your design is visible in Discover.'); } catch (e) { message('Upload failed', e); } finally { setBusy(false); }
+    try { const lookId = await uploadLook(studio.id, title.trim(), Number(price), image); if (matchingConfigured()) { try { await indexLook(lookId); } catch (indexError) { Alert.alert('Design published', `Visual indexing is pending: ${friendlyError(indexError)}`); } } setImage(null); setTitle(''); setPrice(''); await onRefresh(); notify('Design published', 'Your new nail design is now visible in Discover.', 'success'); } catch (e) { notify('Upload failed', friendlyError(e), 'error'); } finally { setBusy(false); }
   }
   async function addSlot() {
     if (!studio || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) return Alert.alert('Time', 'Use YYYY-MM-DD and HH:mm.');
@@ -186,7 +192,7 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh }: { session
     if (Number.isNaN(start.getTime()) || start <= new Date()) return Alert.alert('Time', 'Choose a future date and time.');
     const end = new Date(start.getTime() + 60 * 60 * 1000);
     const { data, error } = await supabase.from('availability_slots').insert({ studio_id: studio.id, starts_at: start.toISOString(), ends_at: end.toISOString() }).select('id,studio_id,starts_at,ends_at').single();
-    if (error) message('Could not add time', error); else { setMySlots(current => [...current, data as Slot].sort((a,b) => a.starts_at.localeCompare(b.starts_at))); setDate(''); setTime(''); }
+    if (error) notify('Could not add appointment', friendlyError(error), 'error'); else { notify('Availability added', 'Clients can now request this appointment.', 'success'); setMySlots(current => [...current, data as Slot].sort((a,b) => a.starts_at.localeCompare(b.starts_at))); setDate(''); setTime(''); }
   }
   async function updateBooking(id: string, status: 'confirmed' | 'cancelled') { const { error } = await supabase.rpc('set_booking_status', { booking_id: id, next_status: status }); if (error) message('Booking', error); else await onRefresh(); }
   return <><Text style={styles.eyebrow}>FOR ARTISTS</Text><Text style={styles.title}>{studio ? 'Manage studio' : 'Create your studio'}</Text><Field label="Studio name" value={name} onChangeText={setName} placeholder="Studio name" /><Field label="City" value={city} onChangeText={setCity} placeholder="Sofia" /><Field label="Address" value={address} onChangeText={setAddress} placeholder="Street and number" /><Field label="About your studio" value={bio} onChangeText={setBio} multiline placeholder="Tell clients about your work" /><Field label="Phone (optional)" value={phone} onChangeText={setPhone} placeholder="Contact number" /><Button label={busy ? 'Saving…' : 'Save studio'} onPress={saveStudio} disabled={busy} />
