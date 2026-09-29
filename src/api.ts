@@ -9,6 +9,7 @@ export type Slot = { id: string; studio_id: string; starts_at: string; ends_at: 
 export type Booking = { id: string; studio_id: string; client_id: string; client_name: string; slot_id: string; look_id: string | null; starts_at: string; status: string; studios: Studio; portfolio_looks?: { id: string; title: string; image_url: string; price_eur: number } | null };
 export type RatingSummary = { avg_rating: number | null; rating_count: number };
 export type BookingRating = { id: string; booking_id: string; rater_id: string; target_type: 'studio' | 'client'; rating: number; comment: string };
+export type StudioReview = { booking_id: string; rating: number; comment: string; created_at: string };
 
 export async function listLooks(): Promise<Look[]> {
   const { data, error } = await supabase.from('portfolio_looks').select('id,studio_id,title,image_url,storage_path,price_eur,studios(id,owner_id,name,city,address,bio,phone)').eq('published', true).order('created_at', { ascending: false }).limit(100);
@@ -102,6 +103,16 @@ export async function getStudioRatings(studioIds: string[]): Promise<Record<stri
     };
   }
   return result;
+}
+export async function getStudioReviews(studioId: string, limit = 10): Promise<StudioReview[]> {
+  const { data, error } = await supabase.rpc('studio_reviews', { for_studio: studioId, review_limit: limit });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    booking_id: row.booking_id,
+    rating: Number(row.rating),
+    comment: String(row.comment || ''),
+    created_at: row.created_at,
+  }));
 }
 export async function getStudioRating(studioId: string): Promise<RatingSummary> {
   const { data, error } = await supabase.rpc('studio_rating', { for_studio: studioId }).single();
