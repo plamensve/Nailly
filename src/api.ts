@@ -2,7 +2,8 @@ import { decode } from 'base64-arraybuffer';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from './supabase';
 
-export type Profile = { id: string; display_name: string; role: 'client' | 'artist'; avatar_url: string | null; city: string | null; bio: string };\nexport type Studio = { id: string; owner_id: string; name: string; city: string; address: string | null; bio: string; phone: string | null };
+export type Profile = { id: string; display_name: string; role: 'client' | 'artist'; avatar_url: string | null; city: string | null; bio: string };
+export type Studio = { id: string; owner_id: string; name: string; city: string; address: string | null; bio: string; phone: string | null };
 export type Look = { id: string; studio_id: string; title: string; image_url: string; price_eur: number; studios: Studio };
 export type Slot = { id: string; studio_id: string; starts_at: string; ends_at: string };
 export type Booking = { id: string; studio_id: string; client_id: string; client_name: string; slot_id: string; starts_at: string; status: string; studios: Studio };
