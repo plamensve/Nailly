@@ -6,7 +6,9 @@ export type Profile = { id: string; display_name: string; role: 'client' | 'arti
 export type Studio = { id: string; owner_id: string; name: string; city: string; address: string | null; bio: string; phone: string | null };
 export type Look = { id: string; studio_id: string; title: string; image_url: string; price_eur: number; studios: Studio };
 export type Slot = { id: string; studio_id: string; starts_at: string; ends_at: string };
-export type Booking = { id: string; studio_id: string; client_id: string; client_name: string; slot_id: string; starts_at: string; status: string; studios: Studio };
+export type Booking = { id: string; studio_id: string; client_id: string; client_name: string; slot_id: string; look_id: string | null; starts_at: string; status: string; studios: Studio; portfolio_looks?: { id: string; title: string; image_url: string; price_eur: number } | null };
+export type RatingSummary = { avg_rating: number | null; rating_count: number };
+export type BookingRating = { id: string; booking_id: string; rater_id: string; target_type: 'studio' | 'client'; rating: number; comment: string };
 
 export async function listLooks(): Promise<Look[]> {
   const { data, error } = await supabase.from('portfolio_looks').select('id,studio_id,title,image_url,price_eur,studios(id,owner_id,name,city,address,bio,phone)').eq('published', true).order('created_at', { ascending: false }).limit(100);
@@ -53,5 +55,40 @@ export async function uploadLook(studioId: string, title: string, price: number,
     throw error;
   }
   return created.id as string;
+}
+export async function updateLook(lookId: string, title: string, price: number) {
+  const { data, error } = await supabase.from('portfolio_looks').update({ title: title.trim(), price_eur: price }).eq('id', lookId).select('id,studio_id,title,image_url,price_eur,studios(id,owner_id,name,city,address,bio,phone)').single();
+  if (error) throw error;
+  return data as unknown as Look;
+}
+export async function getBookingRating(bookingId: string) {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+  const { data, error } = await supabase.from('booking_ratings').select('id,booking_id,rater_id,target_type,rating,comment').eq('booking_id', bookingId).eq('rater_id', auth.user.id).maybeSingle();
+  if (error) throw error;
+  return data as BookingRating | null;
+}
+export async function rateBooking(bookingId: string, targetType: 'studio' | 'client', rating: number, comment: string) {
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  if (!auth.user) throw new Error('Sign in to leave a rating.');
+  const { error } = await supabase.from('booking_ratings').upsert({ booking_id: bookingId, rater_id: auth.user.id, target_type: targetType, rating, comment: comment.trim() }, { onConflict: 'booking_id,rater_id' });
+  if (error) throw error;
+}
+export async function getStudioRating(studioId: string): Promise<RatingSummary> {
+  const { data, error } = await supabase.rpc('studio_rating', { for_studio: studioId }).single();
+  if (error) throw error;
+  return { avg_rating: data?.avg_rating == null ? null : Number(data.avg_rating), rating_count: Number(data?.rating_count || 0) };
+}
+export async function getClientRating(clientId: string): Promise<RatingSummary> {
+  const { data, error } = await supabase.rpc('client_rating', { for_client: clientId }).single();
+  if (error) throw error;
+  return { avg_rating: data?.avg_rating == null ? null : Number(data.avg_rating), rating_count: Number(data?.rating_count || 0) };
+}
+export async function deleteMyAccount() {
+  const { data, error } = await supabase.functions.invoke('delete-account', { body: {} });
+  if (error) throw error;
+  if (!data?.success) throw new Error(data?.error || 'Account deletion failed.');
+  await supabase.auth.signOut();
 }
 export function friendlyError(error: unknown) { return error instanceof Error ? error.message : String(error); }
