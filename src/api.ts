@@ -12,6 +12,13 @@ export async function listLooks(): Promise<Look[]> {
   if (error) throw error;
   return (data || []) as unknown as Look[];
 }
+export async function looksByIds(ids: string[]): Promise<Look[]> {
+  if (!ids.length) return [];
+  const { data, error } = await supabase.from('portfolio_looks').select('id,studio_id,title,image_url,price_eur,studios(id,owner_id,name,city,address,bio,phone)').eq('published', true).in('id', ids);
+  if (error) throw error;
+  const byId = new Map((data || []).map((look: any) => [look.id, look]));
+  return ids.map(id => byId.get(id)).filter(Boolean) as Look[];
+}
 export async function listSlots(studioId: string): Promise<Slot[]> {
   const { data, error } = await supabase.rpc('available_slots', { for_studio: studioId });
   if (error) throw error;
@@ -29,10 +36,11 @@ export async function uploadLook(studioId: string, title: string, price: number,
   const { error: uploadError } = await supabase.storage.from('portfolio').upload(file, decode(asset.base64), { contentType: 'image/jpeg', upsert: false });
   if (uploadError) throw uploadError;
   const { data } = supabase.storage.from('portfolio').getPublicUrl(file);
-  const { error } = await supabase.from('portfolio_looks').insert({ studio_id: studioId, title, price_eur: price, image_url: data.publicUrl, published: true });
+  const { data: created, error } = await supabase.from('portfolio_looks').insert({ studio_id: studioId, title, price_eur: price, image_url: data.publicUrl, storage_path: file, published: true }).select('id').single();
   if (error) {
     await supabase.storage.from('portfolio').remove([file]);
     throw error;
   }
+  return created.id as string;
 }
 export function friendlyError(error: unknown) { return error instanceof Error ? error.message : String(error); }

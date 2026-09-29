@@ -10,6 +10,7 @@ end $$;
 drop trigger if exists on_auth_user_created_nailly on auth.users;
 create trigger on_auth_user_created_nailly after insert on auth.users for each row execute procedure public.create_profile_for_user();
 
+alter table public.portfolio_looks add column if not exists storage_path text;
 alter table public.studios add column if not exists bio text not null default '';
 alter table public.studios add column if not exists phone text;
 create unique index if not exists one_studio_per_owner on public.studios(owner_id);

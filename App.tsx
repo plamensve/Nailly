@@ -3,7 +3,8 @@ import { ActivityIndicator, Alert, Image, Pressable, SafeAreaView, ScrollView, S
 import type { Session } from '@supabase/supabase-js';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { supabase } from './src/supabase';
-import { Booking, friendlyError, listLooks, listSlots, Look, pickPortfolioImage, Slot, Studio, uploadLook } from './src/api';
+import { indexLook, matchPhoto, matchingConfigured } from './src/matching';
+import { Booking, friendlyError, listLooks, listSlots, looksByIds, Look, pickPortfolioImage, Slot, Studio, uploadLook } from './src/api';
 
 const colors = { ink: '#452638', muted: '#877582', coral: '#ec817a', blush: '#fce8e4', canvas: '#fffaf7', edge: '#f2e6e3' };
 const tabNames = ['Discover', 'Saved', 'Bookings', 'Profile'] as const;
@@ -32,6 +33,8 @@ export default function App() {
   const [selected, setSelected] = useState<Look | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [matchedLooks, setMatchedLooks] = useState<Look[]>([]);
+  const [matchState, setMatchState] = useState('');
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -62,7 +65,19 @@ export default function App() {
   useEffect(() => { refresh(session?.user.id); }, [session?.user.id, refresh]);
   useEffect(() => { if (selected) listSlots(selected.studio_id).then(setSlots).catch(e => setError(friendlyError(e))); }, [selected]);
 
-  async function choosePhoto() { try { const asset = await pickPortfolioImage(); if (asset) { setPhoto(asset.uri); setTab('Discover'); setScreen('results'); } } catch (e) { message('Photo', e); } }
+  async function choosePhoto() {
+    try {
+      const asset = await pickPortfolioImage();
+      if (!asset) return;
+      setPhoto(asset.uri); setTab('Discover'); setScreen('results'); setMatchedLooks([]);
+      if (!matchingConfigured()) { setMatchState('Visual similarity ranking will appear after the matching service is deployed.'); return; }
+      if (!session) { setMatchState('Sign in to search by photo.'); return; }
+      if (!asset.base64) { setMatchState('Choose a JPEG photo to search.'); return; }
+      setMatchState('Finding similar designs…');
+      try { const matches = await matchPhoto(asset.base64); setMatchedLooks(await looksByIds(matches)); setMatchState(matches.length ? 'Ranked by visual similarity.' : 'No indexed matches yet. Browse recent work below.'); }
+      catch (e) { setMatchState(`Search unavailable: ${friendlyError(e)}`); }
+    } catch (e) { message('Photo', e); }
+  }
   async function toggleSaved(lookId: string) {
     if (!session) { setScreen('auth'); return; }
     const wasSaved = saved.includes(lookId);
@@ -93,7 +108,7 @@ export default function App() {
     {screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} />
     : screen === 'studio' ? <StudioScreen session={session} studio={studio} looks={looks} bookings={bookings} onRefresh={() => refresh(session?.user.id)} />
     : screen === 'look' && selected ? <><Image source={{ uri: selected.image_url }} style={styles.heroImage} /><Text style={styles.eyebrow}>NAIL STUDIO · {selected.studios.city.toUpperCase()}</Text><Text style={styles.title}>{selected.studios.name}</Text><Text style={styles.body}>{selected.studios.bio || 'Discover the artist behind this look.'}</Text><View style={styles.pill}><Text style={styles.pillText}>✦ {selected.title}  ·  From €{selected.price_eur}</Text></View><Text style={styles.section}>Available appointments</Text>{slots.length ? slots.map(slot => <Pressable key={slot.id} style={styles.slot} onPress={() => requestBooking(slot)} disabled={busy}><Text style={styles.slotText}>{formatTime(slot.starts_at)}</Text><Text style={styles.link}>{busy ? 'Please wait' : 'Request →'}</Text></Pressable>) : <Text style={styles.body}>No free times listed yet.</Text>}{selected.studios.address && <Text style={styles.body}>⌖ {selected.studios.address}, {selected.studios.city}</Text>}</>
-    : screen === 'results' ? <><Text style={styles.eyebrow}>YOUR INSPIRATION</Text><Text style={styles.title}>Find your look.</Text>{photo && <Pressable style={styles.uploaded} onPress={choosePhoto}><Image source={{ uri: photo }} style={styles.thumb} /><Text style={styles.cardTitle}>Your photo  ·  Change</Text></Pressable>}<Text style={styles.section}>Studio work</Text><Text style={styles.body}>Visual similarity ranking is in development. These are real studio designs, currently sorted by newest.</Text>{grid(looks)}</>
+    : screen === 'results' ? <><Text style={styles.eyebrow}>YOUR INSPIRATION</Text><Text style={styles.title}>Find your look.</Text>{photo && <Pressable style={styles.uploaded} onPress={choosePhoto}><Image source={{ uri: photo }} style={styles.thumb} /><Text style={styles.cardTitle}>Your photo  ·  Change</Text></Pressable>}<Text style={styles.section}>Studio work</Text><Text style={styles.body}>{matchState}</Text>{grid(matchedLooks.length ? matchedLooks : looks)}</>
     : tab === 'Discover' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.eyebrow}>YOUR NEXT NAIL MOMENT</Text><Text style={styles.headline}>Find the nails{'\n'}you love.</Text><Text style={styles.body}>From inspiration to the artist who can make it yours.</Text><Pressable style={styles.upload} onPress={choosePhoto}><Text style={styles.camera}>▧</Text><View><Text style={styles.cardTitle}>Upload inspiration</Text><Text style={styles.caption}>Choose a photo from your gallery</Text></View></Pressable><Text style={styles.section}>Explore nail looks</Text><TextInput value={query} onChangeText={setQuery} placeholder="Search design, studio or city" placeholderTextColor="#ad9ca5" style={[styles.input, { marginBottom: 20 }]} />{looks.length ? grid(filteredLooks) : <Empty title="The gallery is growing" detail="Studios will appear here once they publish their first designs." />}</>
     : tab === 'Saved' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Saved looks</Text>{!session ? <Button label="Sign in to save looks" onPress={() => setScreen('auth')} /> : saved.length ? grid(looks.filter(look => saved.includes(look.id))) : <Empty title="Your collection starts here" detail="Tap the heart on a nail look to save it." />}</>
     : tab === 'Bookings' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Appointments</Text>{!session ? <Button label="Sign in to view bookings" onPress={() => setScreen('auth')} /> : bookings.filter(b => b.client_id === session.user.id).length ? bookings.filter(b => b.client_id === session.user.id).map(b => <View key={b.id} style={styles.panel}><Text style={styles.cardTitle}>{b.studios?.name || 'Nail studio'}</Text><Text style={styles.body}>{formatTime(b.starts_at)}  ·  {b.status}</Text>{b.status !== 'cancelled' && <Button label="Cancel request" secondary onPress={() => changeBooking(b.id, 'cancelled')} />}</View>) : <Empty title="Nothing booked yet" detail="Choose a studio and request an available time." />}</>
@@ -139,7 +154,7 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh }: { session
   async function addLook() {
     if (!studio || !image || !title.trim() || !price.trim() || !Number.isFinite(Number(price)) || Number(price) < 0) return Alert.alert('Portfolio', 'Add a photo, title and valid price in euros.');
     setBusy(true);
-    try { await uploadLook(studio.id, title.trim(), Number(price), image); setImage(null); setTitle(''); setPrice(''); await onRefresh(); Alert.alert('Published', 'Your design is visible in Discover.'); } catch (e) { message('Upload failed', e); } finally { setBusy(false); }
+    try { const lookId = await uploadLook(studio.id, title.trim(), Number(price), image); if (matchingConfigured()) { try { await indexLook(lookId); } catch (indexError) { Alert.alert('Design published', `Visual indexing is pending: ${friendlyError(indexError)}`); } } setImage(null); setTitle(''); setPrice(''); await onRefresh(); Alert.alert('Published', 'Your design is visible in Discover.'); } catch (e) { message('Upload failed', e); } finally { setBusy(false); }
   }
   async function addSlot() {
     if (!studio || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) return Alert.alert('Time', 'Use YYYY-MM-DD and HH:mm.');
