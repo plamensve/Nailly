@@ -1,16 +1,29 @@
 # Nailly
 
-An iPhone-first Expo prototype for exploring nail designs and discovering the artists behind them.
+An iPhone-first nail artist marketplace built with Expo, React Native, TypeScript and Supabase.
 
-## Run on an iPhone with Expo Go
+## Start on Windows and iPhone
 
-1. Install Node.js LTS and clone this repository in PyCharm on Windows.
-2. Run `npm install`.
-3. Copy `.env.example` to `.env`. The project URL and publishable key are public client configuration; never put a secret or service-role key in an Expo variable.
-4. Run `npx expo start`. Scan the QR code with your iPhone camera and open Expo Go. Keep the computer and iPhone on the same Wi-Fi network. If discovery fails, try `npx expo start --tunnel`.
+1. Pull the latest `main` branch in PyCharm and install Node.js LTS.
+2. Run `npm install` in the repository root.
+3. Copy `.env.example` to `.env`. The existing publishable key is client-side configuration. Never put a service-role key in the app.
+4. Run `npx expo start` and scan the QR code with the iPhone camera. If the devices cannot connect on the same Wi-Fi, use `npx expo start --tunnel`.
 
-The app initially displays sample cards. Photo selection happens on-device; no photo is uploaded. Similarity ranking, user accounts, artist uploads, availability and real bookings are not implemented yet. The appointment button only shows an explanation.
+## Database setup
 
-## Supabase
+Run these SQL files **in order** in the Supabase project's SQL Editor, once each:
 
-The client reads published `portfolio_looks` joined to `studios` if those tables exist and contain data. Otherwise it shows sample cards. The reviewed schema and RLS policies are in `supabase/migrations/20260929180000_initial.sql`. Apply the migration in the project's SQL Editor before using real portfolio data. This repository connection does not automatically apply SQL to Supabase. Never use the service-role key in the mobile app.
+1. `supabase/migrations/20260929180000_initial.sql` (skip if its four tables already exist and this migration ran successfully).
+2. `supabase/migrations/20260929210000_marketplace.sql`.
+
+The second migration adds the user profile trigger, saved looks, availability, booking controls, storage bucket and RLS policies. GitHub does not apply these migrations to your Supabase project automatically. If email confirmation is enabled in Supabase Auth, new users must confirm their address before signing in. Artist photos are public once published.
+
+## Current features
+
+- Email/password client and artist registration and persistent sign-in.
+- Public studio portfolio, search by design/studio/city, favorites for signed-in users.
+- Studio creation/editing, photo upload, starting price, future 60-minute appointment slots.
+- Client appointment requests, artist confirmation, cancellation, and double-booking protection.
+- On-device inspiration photo selection.
+
+Visual similarity ranking is **not yet implemented**: the photo is not uploaded and results remain a chronological gallery. Production release still needs a deployed image embedding service, search evaluation, more booking controls, testing on real iPhones and App Store preparation. Sample data is no longer shown; studios must publish portfolio looks for Discover to populate.
