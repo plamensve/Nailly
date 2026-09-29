@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>Confirm your Nailly account</title>
+  </head>
+  <body style="margin:0;padding:0;background:#fffaf7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#452638;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#fffaf7;margin:0;padding:0;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #f2e6e3;border-radius:28px;overflow:hidden;">
+            <tr>
+              <td style="padding:34px 34px 12px;text-align:center;">
+                <div style="font-size:34px;line-height:40px;font-weight:800;letter-spacing:-1.8px;color:#452638;">
+                  nailly<span style="color:#ec817a;">.</span>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:8px 34px 0;text-align:center;">
+                <div style="display:inline-block;background:#fce8e4;border-radius:999px;padding:7px 12px;font-size:10px;line-height:14px;font-weight:800;letter-spacing:1.5px;color:#ec817a;">
+                  EMAIL VERIFICATION
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:22px 34px 0;text-align:center;">
+                <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:34px;line-height:41px;font-weight:500;color:#452638;">
+                  Confirm your email
+                </h1>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:14px 40px 0;text-align:center;">
+                <p style="margin:0;font-size:15px;line-height:23px;color:#877582;">
+                  You’re almost ready to use Nailly. Confirm your email address to finish creating your account.
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding:28px 34px 8px;">
+                <a href="{{ .ConfirmationURL }}"
+                   style="display:inline-block;background:#ec817a;color:#ffffff;text-decoration:none;font-size:15px;line-height:20px;font-weight:800;padding:15px 28px;border-radius:15px;">
+                  Confirm email
+                </a>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:18px 40px 0;text-align:center;">
+                <p style="margin:0;font-size:11px;line-height:18px;color:#a18f99;">
+                  If the button doesn’t work, use the secure confirmation link below:
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:8px 40px 0;text-align:center;word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}"
+                   style="font-size:10px;line-height:16px;color:#ec817a;text-decoration:underline;">
+                  {{ .ConfirmationURL }}
+                </a>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:28px 34px 32px;">
+                <div style="height:1px;background:#f2e6e3;margin-bottom:20px;"></div>
+                <p style="margin:0;text-align:center;font-size:11px;line-height:18px;color:#a18f99;">
+                  If you didn’t create a Nailly account, you can safely ignore this email.
+                </p>
+                <p style="margin:10px 0 0;text-align:center;font-size:10px;line-height:16px;color:#b3a3ab;">
+                  Nailly · Nail inspiration, studios and appointments
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:560px;">
+            <tr>
+              <td style="padding:18px 24px 0;text-align:center;">
+                <p style="margin:0;font-size:10px;line-height:16px;color:#b6a8af;">
+                  This is an automated account verification email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
