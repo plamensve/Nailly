@@ -612,8 +612,8 @@ const styles = StyleSheet.create({
 
   studioPreviewMain: { flexDirection: 'row', alignItems: 'center' },
   studioPreviewContent: { flex: 1, paddingRight: 14 },
-  studioPreviewProfilePhoto: { width: 92, height: 92, borderRadius: 20, backgroundColor: colors.blush, borderWidth: 1, borderColor: colors.edge },
-  studioPreviewProfilePlaceholder: { width: 92, height: 92, borderRadius: 20, backgroundColor: colors.blush, borderWidth: 1, borderColor: colors.edge, alignItems: 'center', justifyContent: 'center' },
+  studioPreviewProfilePhoto: { width: 92, height: 92, borderRadius: 46, backgroundColor: colors.blush, borderWidth: 1, borderColor: colors.edge },
+  studioPreviewProfilePlaceholder: { width: 92, height: 92, borderRadius: 46, backgroundColor: colors.blush, borderWidth: 1, borderColor: colors.edge, alignItems: 'center', justifyContent: 'center' },
   studioPreviewProfilePlaceholderText: { color: colors.coral, fontSize: 28, fontWeight: '900' },
   editStudioButton: { backgroundColor: colors.blush, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginLeft: 8 },
   editStudioButtonText: { color: colors.coral, fontSize: 11, fontWeight: '900' },
