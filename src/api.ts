@@ -141,13 +141,13 @@ export async function listStudioPhotos(studioId: string): Promise<StudioPhoto[]>
   if (error) throw error;
   return (data || []) as StudioPhoto[];
 }
-export async function uploadStudioPhoto(studioId: string, asset: ImagePicker.ImagePickerAsset) {
+export async function uploadStudioPhoto(studioId: string, asset: ImagePicker.ImagePickerAsset, sortOrder = 0) {
   if (!asset.base64) throw new Error('Could not read the selected studio photo.');
   const file = `${studioId}/studio/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
   const { error: uploadError } = await supabase.storage.from('portfolio').upload(file, decode(asset.base64), { contentType: 'image/jpeg', upsert: false });
   if (uploadError) throw uploadError;
   const { data: publicData } = supabase.storage.from('portfolio').getPublicUrl(file);
-  const { data, error } = await supabase.from('studio_photos').insert({ studio_id: studioId, image_url: publicData.publicUrl, storage_path: file }).select('id,studio_id,image_url,storage_path,sort_order,created_at').single();
+  const { data, error } = await supabase.from('studio_photos').insert({ studio_id: studioId, image_url: publicData.publicUrl, storage_path: file, sort_order: sortOrder }).select('id,studio_id,image_url,storage_path,sort_order,created_at').single();
   if (error) { await supabase.storage.from('portfolio').remove([file]); throw error; }
   return data as StudioPhoto;
 }
