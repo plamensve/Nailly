@@ -157,3 +157,10 @@ export async function deleteStudioPhoto(photo: StudioPhoto) {
   const { error: storageError } = await supabase.storage.from('portfolio').remove([photo.storage_path]);
   if (storageError) throw storageError;
 }
+
+export async function reorderStudioPhotos(studioId: string, photos: StudioPhoto[]) {
+  const updates = photos.map((photo, index) => supabase.from('studio_photos').update({ sort_order: index }).eq('id', photo.id).eq('studio_id', studioId));
+  const results = await Promise.all(updates);
+  const failed = results.find(result => result.error);
+  if (failed?.error) throw failed.error;
+}
