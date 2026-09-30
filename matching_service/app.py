@@ -101,16 +101,111 @@ class ImageQuery(BaseModel):
     image_base64: str = Field(max_length=11_000_000)
 
 
-@app.post('/search')
-def search(query: ImageQuery, user_id: str = Depends(authenticated_user)):
+ATTRIBUTE_PROMPTS = {
+    'shape': {
+        'almond': 'a manicure with almond shaped fingernails',
+        'square': 'a manicure with square shaped fingernails',
+        'round': 'a manicure with round shaped fingernails',
+        'oval': 'a manicure with oval shaped fingernails',
+        'coffin': 'a manicure with coffin ballerina shaped fingernails',
+        'stiletto': 'a manicure with long pointed stiletto fingernails',
+        'squoval': 'a manicure with squoval shaped fingernails',
+    },
+    'length': {
+        'short': 'a manicure with short fingernails',
+        'medium': 'a manicure with medium length fingernails',
+        'long': 'a manicure with long fingernails',
+        'extra_long': 'a manicure with extra long fingernails',
+    },
+    'style': {
+        'french': 'a french manicure nail design',
+        'ombre': 'an ombre gradient manicure',
+        'chrome': 'a chrome metallic manicure',
+        'cat_eye': 'a cat eye magnetic nail design',
+        'glitter': 'a glitter nail design',
+        'minimalist': 'a minimalist nail design',
+        'floral': 'a floral flower nail art design',
+        'geometric': 'a geometric nail art design',
+        'marble': 'a marble nail art design',
+        'solid_color': 'a solid single color manicure',
+    },
+    'finish': {
+        'glossy': 'glossy shiny fingernails',
+        'matte': 'matte fingernails',
+        'chrome': 'chrome mirror finish fingernails',
+        'glitter': 'glitter finish fingernails',
+    },
+    'color': {
+        'nude': 'nude beige manicure',
+        'white': 'white manicure',
+        'pink': 'pink manicure',
+        'red': 'red manicure',
+        'black': 'black manicure',
+        'blue': 'blue manicure',
+        'green': 'green manicure',
+        'purple': 'purple manicure',
+        'brown': 'brown manicure',
+        'gold': 'gold manicure',
+        'silver': 'silver manicure',
+        'multicolor': 'multicolor manicure with several colors',
+    },
+}
+
+
+@lru_cache(maxsize=1)
+def attribute_text_features():
+    model, _, tokenizer = model_and_transform()
+    result = {}
+    with torch.inference_mode():
+        for group, prompts in ATTRIBUTE_PROMPTS.items():
+            labels = list(prompts.keys())
+            features = model.encode_text(tokenizer(list(prompts.values())))
+            features = features / features.norm(dim=-1, keepdim=True)
+            result[group] = (labels, features)
+    return result
+
+
+def detect_attributes(image_features):
+    detected = {}
+    with torch.inference_mode():
+        for group, (labels, features) in attribute_text_features().items():
+            probs = (100.0 * image_features @ features.T).softmax(dim=-1)[0]
+            if group == 'color':
+                order = torch.argsort(probs, descending=True)[:2].tolist()
+                colors = [{'value': labels[i], 'confidence': round(float(probs[i].item()), 3)} for i in order]
+                detected['colors'] = colors
+            else:
+                i = int(torch.argmax(probs).item())
+                detected[group] = {'value': labels[i], 'confidence': round(float(probs[i].item()), 3)}
+    return detected
+
+
+def decode_query_image(query: ImageQuery):
     try:
         raw = base64.b64decode(query.image_base64, validate=True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail='Invalid base64') from exc
+    if not raw or len(raw) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail='Image must be at most 8 MB')
     try:
-        picture = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert('RGB')
+        return ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert('RGB')
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
         raise HTTPException(status_code=400, detail='Invalid image') from exc
+
+
+@app.post('/analyze')
+def analyze(query: ImageQuery, user_id: str = Depends(authenticated_user)):
+    picture = decode_query_image(query)
+    image_features = normalized_image_features(picture)
+    confidence = nail_confidence_from_features(image_features)
+    if confidence < 0.55:
+        raise HTTPException(status_code=422, detail='This photo does not look like a manicure or nail design. Choose a clear close-up photo of nails.')
+    return {'attributes': detect_attributes(image_features), 'nail_confidence': round(confidence, 3), 'model': MODEL_NAME}
+
+
+@app.post('/search')
+def search(query: ImageQuery, user_id: str = Depends(authenticated_user)):
+    picture = decode_query_image(query)
     # Encode the query only once. Previously /search ran CLIP twice (validation +
     # embedding), which made CPU cold starts much more likely to exceed mobile timeouts.
     image_features = normalized_image_features(picture)
