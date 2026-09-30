@@ -17,7 +17,7 @@ or a public container image.
 From `matching_service`:
 
 ```bash
-docker build -t nailly-matching .
+docker build --progress=plain -t nailly-matching .
 docker run --rm -p 8000:8000 \
   -e SUPABASE_URL="https://YOUR_PROJECT.supabase.co" \
   -e SUPABASE_SERVICE_ROLE_KEY="YOUR_KEY" \
@@ -29,6 +29,16 @@ Then open `http://localhost:8000/health`. Expected response:
 ```json
 {"ok":true}
 ```
+
+## CPU-only production image
+
+The Docker image intentionally installs PyTorch and torchvision from the official
+CPU wheel index before installing the remaining dependencies. This prevents pip
+from downloading the large CUDA/NVIDIA runtime packages, which are unnecessary
+for the CPU-only AWS Lightsail container service.
+
+If a future deployment moves to a GPU runtime, use a separate GPU-specific image
+rather than changing this production CPU image.
 
 ## AWS Lightsail container service
 
