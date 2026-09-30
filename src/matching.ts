@@ -43,6 +43,36 @@ export async function matchPhoto(base64: string): Promise<PhotoMatch[]> {
     }
   }
 }
+export type NailAttributes = {
+  shape: string;
+  length: string;
+  style: string;
+  finish: string;
+  colors: string[];
+};
+export async function analyzeNails(base64: string): Promise<NailAttributes> {
+  if (!baseUrl) throw new Error('AI analysis needs a running matching server.');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch(`${baseUrl}/analyze`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await bearer()}` },
+      body: JSON.stringify({ image_base64: base64 }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(typeof body?.detail === 'string' ? body.detail : `AI analysis returned ${response.status}.`);
+    const a = body?.attributes || {};
+    return {
+      shape: a.shape?.value || 'almond',
+      length: a.length?.value || 'medium',
+      style: a.style?.value || 'minimalist',
+      finish: a.finish?.value || 'glossy',
+      colors: Array.isArray(a.colors) ? a.colors.map((x: any) => x.value).filter(Boolean).slice(0, 2) : [],
+    };
+  } finally { clearTimeout(timeout); }
+}
 export async function indexLook(lookId: string) {
   if (!baseUrl) return;
   const response = await fetch(`${baseUrl}/index/${lookId}`, { method: 'POST', headers: { Authorization: `Bearer ${await bearer()}` } });
