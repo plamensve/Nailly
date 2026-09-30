@@ -8,6 +8,7 @@ from uuid import UUID
 import open_clip
 import torch
 from fastapi import Depends, FastAPI, Header, HTTPException
+from contextlib import asynccontextmanager
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from scoring import rank_matches
@@ -17,7 +18,16 @@ from supabase import Client, create_client
 MODEL_NAME = 'ViT-B-32-laion2b_s34b_b79k'
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 Image.MAX_IMAGE_PIXELS = 24_000_000
-app = FastAPI(title='Nailly visual search')
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Warm CLIP and text embeddings once when the container starts. Search requests
+    # should never pay model-download/model-init cost.
+    model_and_transform()
+    nail_text_features()
+    yield
+
+
+app = FastAPI(title='Nailly visual search', lifespan=lifespan)
 
 
 @lru_cache(maxsize=1)
@@ -111,16 +121,13 @@ def search(query: ImageQuery, user_id: str = Depends(authenticated_user)):
     db = database()
     params = {'query_embedding': embedding, 'result_limit': 30}
     result = db.rpc('match_nail_looks', params).execute()
-    repaired = {'indexed': 0, 'failed': 0}
-    if not result.data:
-        # Repair an empty index on first search, without rescanning a large gallery
-        # on every subsequent query. Normal uploads index through /index.
-        repaired = index_missing(db, image_embedding, MODEL_NAME)
-        result = db.rpc('match_nail_looks', params).execute()
+    # Never index portfolio photos inside a user search. Indexing downloads images
+    # and runs CLIP once per missing look, so doing it here can turn one search into
+    # minutes of CPU work and guarantees mobile timeouts on an empty index.
     matches = rank_matches(result.data or [])
     if not matches:
-        raise HTTPException(status_code=503, detail='No indexed studio photos are available. The matching server must finish portfolio indexing before photo search can return results.')
-    return {'results': matches, 'model': MODEL_NAME, 'score_type': 'calibrated_visual_match', 'nail_confidence': round(confidence, 3), 'indexing': repaired}
+        raise HTTPException(status_code=503, detail='No indexed studio photos are available yet. Re-index the studio portfolio, then retry the search.')
+    return {'results': matches, 'model': MODEL_NAME, 'score_type': 'calibrated_visual_match', 'nail_confidence': round(confidence, 3)}
 
 
 @app.post('/index/{look_id}')
