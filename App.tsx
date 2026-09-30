@@ -5,7 +5,7 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from './src/supabase';
 import { analyzeNails, indexLook, matchPhoto, matchingConfigured, NailAttributes } from './src/matching';
-import { Booking, deleteMyAccount, friendlyError, getBookingRating, getClientRating, getStudioRating, getStudioRatings, getStudioReviews, deleteStudioPhoto, listLooks, listSlots, listStudioPhotos, looksByIds, Look, pickPortfolioImage, Profile, rateBooking, replaceLookImage, Slot, Studio, StudioPhoto, updateLook, uploadAvatar, uploadLook, uploadStudioPhoto } from './src/api';
+import { Booking, deleteMyAccount, friendlyError, getBookingRating, getClientRating, getStudioRating, getStudioRatings, getStudioReviews, deleteStudioPhoto, listLooks, listSlots, listStudioPhotos, looksByIds, Look, pickPortfolioImage, Profile, rateBooking, replaceLookImage, reorderStudioPhotos, Slot, Studio, StudioPhoto, updateLook, uploadAvatar, uploadLook, uploadStudioPhoto } from './src/api';
 import { legalPages } from './src/legal';
 import type { LegalPageKey } from './src/legal';
 
@@ -488,7 +488,7 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onO
     try {
       const asset = await pickPortfolioImage();
       if (!asset) return;
-      const created = await uploadStudioPhoto(studio.id, asset);
+      const created = await uploadStudioPhoto(studio.id, asset, studioPhotos.length);
       setStudioPhotos(current => [...current, created]);
       notify('Studio photo added', 'The photo is now part of your studio gallery.', 'success');
     } catch (e) { notify('Could not add studio photo', friendlyError(e), 'error'); }
@@ -498,6 +498,20 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onO
     setStudioPhotoBusy(true);
     try { await deleteStudioPhoto(photo); setStudioPhotos(current => current.filter(x => x.id !== photo.id)); notify('Studio photo removed', 'The photo was removed from your gallery.', 'success'); }
     catch (e) { notify('Could not remove studio photo', friendlyError(e), 'error'); }
+    finally { setStudioPhotoBusy(false); }
+  }
+  async function moveStudioPhoto(index: number, direction: -1 | 1) {
+    if (!studio || studioPhotoBusy) return;
+    const target = index + direction;
+    if (target < 0 || target >= studioPhotos.length) return;
+    const previous = studioPhotos;
+    const reordered = [...studioPhotos];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    const normalized = reordered.map((photo, order) => ({ ...photo, sort_order: order }));
+    setStudioPhotos(normalized);
+    setStudioPhotoBusy(true);
+    try { await reorderStudioPhotos(studio.id, normalized); }
+    catch (e) { setStudioPhotos(previous); notify('Could not reorder photos', friendlyError(e), 'error'); }
     finally { setStudioPhotoBusy(false); }
   }
   async function addLook() {
@@ -541,7 +555,7 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onO
             {studioPhotoBusy ? <ActivityIndicator color="white"/> : <Text style={styles.addStudioPhotoPlus}>＋</Text>}
             <Text style={styles.addStudioPhotoText}>{studioPhotoBusy ? 'Uploading…' : 'Add photo to this studio'}</Text>
           </Pressable>
-          {studioPhotos.length > 0 && <View style={styles.studioPhotoGrid}>{studioPhotos.map(photo=><View key={photo.id} style={styles.studioPhotoCard}><Image source={{uri:photo.image_url}} style={styles.studioPhotoImage}/><Pressable style={styles.studioPhotoRemove} onPress={()=>removeStudioPhoto(photo)} disabled={studioPhotoBusy}><Text style={styles.studioPhotoRemoveText}>×</Text></Pressable></View>)}</View>}
+          {studioPhotos.length > 0 && <View style={styles.studioPhotoGrid}>{studioPhotos.map((photo,index)=><View key={photo.id} style={styles.studioPhotoCard}><Image source={{uri:photo.image_url}} style={styles.studioPhotoImage}/>{index===0&&<View style={styles.profilePhotoBadge}><Text style={styles.profilePhotoBadgeText}>★ PROFILE PHOTO</Text></View>}<Pressable style={styles.studioPhotoRemove} onPress={()=>removeStudioPhoto(photo)} disabled={studioPhotoBusy}><Text style={styles.studioPhotoRemoveText}>×</Text></Pressable><View style={styles.photoOrderControls}><Pressable disabled={index===0||studioPhotoBusy} onPress={()=>moveStudioPhoto(index,-1)} style={[styles.photoOrderButton,(index===0||studioPhotoBusy)&&styles.photoOrderButtonDisabled]}><Text style={styles.photoOrderText}>‹</Text></Pressable><Text style={styles.photoOrderPosition}>{index+1}</Text><Pressable disabled={index===studioPhotos.length-1||studioPhotoBusy} onPress={()=>moveStudioPhoto(index,1)} style={[styles.photoOrderButton,(index===studioPhotos.length-1||studioPhotoBusy)&&styles.photoOrderButtonDisabled]}><Text style={styles.photoOrderText}>›</Text></Pressable></View></View>)}</View>}
         </View>
       </View>
     )}
@@ -615,6 +629,13 @@ const styles = StyleSheet.create({
   studioPhotoImage: { width: '100%', height: '100%' },
   studioPhotoRemove: { position: 'absolute', right: 8, top: 8, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(69,38,56,.82)', alignItems: 'center', justifyContent: 'center' },
   studioPhotoRemoveText: { color: 'white', fontSize: 22, lineHeight: 25, fontWeight: '700' },
+  profilePhotoBadge: { position: 'absolute', left: 8, top: 8, backgroundColor: colors.coral, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
+  profilePhotoBadgeText: { color: 'white', fontSize: 8, fontWeight: '900', letterSpacing: .5 },
+  photoOrderControls: { position: 'absolute', left: 8, right: 8, bottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  photoOrderButton: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(69,38,56,.86)', alignItems: 'center', justifyContent: 'center' },
+  photoOrderButtonDisabled: { opacity: .3 },
+  photoOrderText: { color: 'white', fontSize: 24, lineHeight: 27, fontWeight: '800' },
+  photoOrderPosition: { color: 'white', backgroundColor: 'rgba(69,38,56,.72)', fontSize: 10, fontWeight: '900', minWidth: 28, height: 24, lineHeight: 24, textAlign: 'center', marginHorizontal: 5, borderRadius: 12 },
 
   // Profile
   profileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
