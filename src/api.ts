@@ -117,12 +117,14 @@ export async function getStudioReviews(studioId: string, limit = 10): Promise<St
 export async function getStudioRating(studioId: string): Promise<RatingSummary> {
   const { data, error } = await supabase.rpc('studio_rating', { for_studio: studioId }).single();
   if (error) throw error;
-  return { avg_rating: data?.avg_rating == null ? null : Number(data.avg_rating), rating_count: Number(data?.rating_count || 0) };
+  const row = data as { avg_rating?: number | null; rating_count?: number } | null;
+  return { avg_rating: row?.avg_rating == null ? null : Number(row.avg_rating), rating_count: Number(row?.rating_count || 0) };
 }
 export async function getClientRating(clientId: string): Promise<RatingSummary> {
   const { data, error } = await supabase.rpc('client_rating', { for_client: clientId }).single();
   if (error) throw error;
-  return { avg_rating: data?.avg_rating == null ? null : Number(data.avg_rating), rating_count: Number(data?.rating_count || 0) };
+  const row = data as { avg_rating?: number | null; rating_count?: number } | null;
+  return { avg_rating: row?.avg_rating == null ? null : Number(row.avg_rating), rating_count: Number(row?.rating_count || 0) };
 }
 export async function deleteMyAccount() {
   const { data, error } = await supabase.functions.invoke('delete-account', { body: {} });

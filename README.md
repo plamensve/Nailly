@@ -24,9 +24,9 @@ The second migration adds the user profile trigger, saved looks, availability, b
 - Public studio portfolio, search by design/studio/city, favorites for signed-in users.
 - Studio creation/editing, photo upload, starting price, future 60-minute appointment slots.
 - Client appointment requests, artist confirmation, cancellation, and double-booking protection.
-- On-device inspiration photo selection.
+- Inspiration photo search with OpenCLIP embeddings, results ranked by cosine similarity, and a visual match percentage on every result (requires the matching service).
 
-Visual similarity ranking is **not yet implemented**: the photo is not uploaded and results remain a chronological gallery. Production release still needs a deployed image embedding service, search evaluation, more booking controls, testing on real iPhones and App Store preparation. Sample data is no longer shown; studios must publish portfolio looks for Discover to populate.
+The app sends the selected inspiration photo to the configured matching service, retains each result's similarity score and shows only actual matches on the results screen. Loading, empty results, sign-in, unavailable service and retry states are handled explicitly. Percentages are `clamp(cosine_similarity, 0, 1) × 100`, rounded to one decimal; they are visual similarity scores, **not** probabilities of identical designs. No scores are invented when the backend is unavailable. Production release still needs a deployed embedding service and relevance evaluation with real manicure images.
 
 ## Visual similarity service
 
@@ -44,3 +44,13 @@ python backfill.py
 ```
 
 The service verifies Supabase user tokens before search and studio ownership before indexing. Keep the service-role key on the server only. Use HTTPS, request rate limits and monitoring before public launch. A 10,000-image portfolio can be queried through the vector index after existing images have been embedded; the model still needs real manicure test photos and relevance evaluation before the results are treated as a product-quality recommendation.
+
+## Verify visual matching
+
+```bash
+npm run typecheck
+npm run test:matching
+python -m unittest discover -s matching_service -p 'test_*.py'
+```
+
+Set `EXPO_PUBLIC_MATCH_API_URL` in `.env` to the reachable matching server and restart Expo. The existing visual-search SQL must be applied first. Run `python backfill.py` on that server to index existing portfolio photos. New designs and replaced photos request indexing automatically; failed indexing is reported and can be retried by backfill. Search covers indexed published designs, rather than the 100-item Discover gallery. Inspiration photos are processed in memory, not saved to portfolio storage. Test with an indexed photo itself (expected near 100%), a similar design and an unrelated design before launch.

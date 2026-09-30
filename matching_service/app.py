@@ -8,8 +8,9 @@ from uuid import UUID
 import open_clip
 import torch
 from fastapi import Depends, FastAPI, Header, HTTPException
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, Field
+from scoring import rank_matches
 from supabase import Client, create_client
 
 MODEL_NAME = 'ViT-B-32-laion2b_s34b_b79k'
@@ -50,13 +51,13 @@ def image_embedding(raw: bytes) -> list[float]:
     try:
         picture = Image.open(io.BytesIO(raw))
         picture.verify()
-        picture = Image.open(io.BytesIO(raw)).convert('RGB')
+        picture = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert('RGB')
         model, transform = model_and_transform()
         with torch.inference_mode():
             features = model.encode_image(transform(picture).unsqueeze(0))
             features = features / features.norm(dim=-1, keepdim=True)
         return features[0].float().tolist()
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
         raise HTTPException(status_code=400, detail='Invalid image') from exc
 
 
@@ -74,7 +75,7 @@ def search(query: ImageQuery, user_id: str = Depends(authenticated_user)):
     result = database().rpc('match_nail_looks', {
         'query_embedding': embedding, 'result_limit': 30,
     }).execute()
-    return {'results': result.data or [], 'model': MODEL_NAME}
+    return {'results': rank_matches(result.data or []), 'model': MODEL_NAME, 'score_type': 'cosine_similarity'}
 
 
 @app.post('/index/{look_id}')

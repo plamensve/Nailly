@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { parsePhotoMatches, PhotoMatch } from './similarity';
 
 const baseUrl = process.env.EXPO_PUBLIC_MATCH_API_URL?.replace(/\/$/, '');
 export function matchingConfigured() { return Boolean(baseUrl); }
@@ -7,12 +8,20 @@ async function bearer() {
   if (!data.session) throw new Error('Sign in to use visual search.');
   return data.session.access_token;
 }
-export async function matchPhoto(base64: string): Promise<string[]> {
+export async function matchPhoto(base64: string): Promise<PhotoMatch[]> {
   if (!baseUrl) throw new Error('Visual search is not configured yet.');
-  const response = await fetch(`${baseUrl}/search`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await bearer()}` }, body: JSON.stringify({ image_base64: base64 }) });
-  if (!response.ok) throw new Error(`Visual search returned ${response.status}`);
-  const result = await response.json();
-  return (result.results || []).map((item: { look_id: string }) => item.look_id);
+  const token = await bearer();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch(`${baseUrl}/search`, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ image_base64: base64 }) });
+    if (!response.ok) throw new Error(`Visual search returned ${response.status}. Please try again.`);
+    const result = await response.json();
+    return parsePhotoMatches(result.results);
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('Visual search timed out. Please try again.');
+    throw error;
+  } finally { clearTimeout(timeout); }
 }
 export async function indexLook(lookId: string) {
   if (!baseUrl) return;

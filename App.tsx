@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import type { ImagePickerAsset } from 'expo-image-picker';
@@ -24,9 +24,9 @@ function Field({ label, value, onChangeText, placeholder, secureTextEntry, keybo
 function Toast({ title, detail, type = 'success', onClose }: { title: string; detail: string; type?: 'success' | 'error' | 'info'; onClose: () => void }) {
   return <Pressable onPress={onClose} style={[styles.toast, type === 'error' && styles.toastError, type === 'info' && styles.toastInfo]}><View style={styles.toastIcon}><Text style={styles.toastIconText}>{type === 'success' ? '✓' : type === 'error' ? '!' : 'i'}</Text></View><View style={{ flex: 1 }}><Text style={styles.toastTitle}>{title}</Text><Text style={styles.toastDetail}>{detail}</Text></View><Text style={styles.toastClose}>×</Text></Pressable>;
 }
-function LookCard({ look, favorite, saved, onPress, rating }: { look: Look; favorite: () => void; saved: boolean; onPress: () => void; rating?: { avg_rating: number | null; rating_count: number } }) {
+function LookCard({ look, favorite, saved, onPress, rating, matchPercent }: { look: Look; favorite: () => void; saved: boolean; onPress: () => void; rating?: { avg_rating: number | null; rating_count: number }; matchPercent?: number }) {
   const hasRating = Boolean(rating?.rating_count);
-  return <Pressable style={styles.card} onPress={onPress}><Image source={{ uri: look.image_url }} style={styles.cardImage} /><Pressable style={styles.heart} onPress={favorite}><Text style={styles.heartText}>{saved ? '♥' : '♡'}</Text></Pressable><View style={styles.cardBody}><Text numberOfLines={1} style={styles.cardTitle}>{look.title}</Text><View style={styles.cardStudioRow}><Text numberOfLines={1} style={[styles.caption,{flex:1}]}>{look.studios.name}</Text><View style={styles.cardRating}><Text style={styles.cardRatingStar}>★</Text><Text style={styles.cardRatingText}>{hasRating ? `${rating?.avg_rating?.toFixed(1)} · ${rating?.rating_count}` : 'New'}</Text></View></View><View style={styles.between}><Text style={styles.tiny}>⌖ {look.studios.city}</Text><Text style={styles.price}>€{look.price_eur}</Text></View></View></Pressable>;
+  return <Pressable style={styles.card} onPress={onPress}><Image source={{ uri: look.image_url }} style={styles.cardImage} /><Pressable style={styles.heart} onPress={favorite}><Text style={styles.heartText}>{saved ? '♥' : '♡'}</Text></Pressable><View style={styles.cardBody}>{matchPercent !== undefined && <View accessible accessibilityLabel={`${matchPercent}% visual match`} style={styles.matchPanel}><View style={styles.between}><Text style={styles.matchLabel}>VISUAL MATCH</Text><Text style={styles.matchValue}>{matchPercent.toFixed(1)}%</Text></View><View style={styles.matchTrack}><View style={[styles.matchFill, { width: `${matchPercent}%` }]} /></View></View>}<Text numberOfLines={1} style={styles.cardTitle}>{look.title}</Text><View style={styles.cardStudioRow}><Text numberOfLines={1} style={[styles.caption,{flex:1}]}>{look.studios.name}</Text><View style={styles.cardRating}><Text style={styles.cardRatingStar}>★</Text><Text style={styles.cardRatingText}>{hasRating ? `${rating?.avg_rating?.toFixed(1)} · ${rating?.rating_count}` : 'New'}</Text></View></View><View style={styles.between}><Text style={styles.tiny}>⌖ {look.studios.city}</Text><Text style={styles.price}>€{look.price_eur}</Text></View></View></Pressable>;
 }
 
 export default function App() {
@@ -50,6 +50,10 @@ export default function App() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [matchedLooks, setMatchedLooks] = useState<Look[]>([]);
   const [matchState, setMatchState] = useState('');
+  const [matchScores, setMatchScores] = useState<Record<string, number>>({});
+  const [matchLoading, setMatchLoading] = useState(false);
+  const searchVersion = useRef(0);
+  const inspiration = useRef<string | null>(null);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -140,17 +144,38 @@ export default function App() {
   }, [session?.user.id, refresh]);
   useEffect(() => { if (selected) listSlots(selected.studio_id).then(setSlots).catch(e => setError(friendlyError(e))); }, [selected]);
 
+  useEffect(() => {
+    ++searchVersion.current;
+    setMatchedLooks([]); setMatchScores({}); setMatchLoading(false);
+    setMatchState('Search your inspiration photo to find similar designs.');
+  }, [session?.user.id]);
+
+  async function searchPhoto(base64: string) {
+    const version = ++searchVersion.current;
+    setMatchedLooks([]); setMatchScores({});
+    if (!matchingConfigured()) { setMatchState('Photo search is not available yet. Please try again later.'); setMatchLoading(false); return; }
+    if (!session) { setMatchState('Sign in to search by photo.'); setMatchLoading(false); return; }
+    setMatchLoading(true); setMatchState('Comparing your photo with studio designs…');
+    try {
+      const matches = await matchPhoto(base64);
+      const results = await looksByIds(matches.map(match => match.look_id));
+      if (version !== searchVersion.current) return;
+      setMatchedLooks(results);
+      setMatchScores(Object.fromEntries(matches.map(match => [match.look_id, match.match_percent])));
+      setMatchState(results.length ? `${results.length} designs ranked by visual similarity. Higher percentages mean closer visual matches, not a guarantee of identical nails.` : 'No searchable designs found yet. Try another photo or explore Discover.');
+    } catch (e) {
+      if (version === searchVersion.current) setMatchState(`Search unavailable: ${friendlyError(e)}`);
+    } finally { if (version === searchVersion.current) setMatchLoading(false); }
+  }
   async function choosePhoto() {
     try {
       const asset = await pickPortfolioImage();
       if (!asset) return;
-      setPhoto(asset.uri); setTab('Discover'); setScreen('results'); setMatchedLooks([]);
-      if (!matchingConfigured()) { setMatchState('Visual similarity ranking will appear after the matching service is deployed.'); return; }
-      if (!session) { setMatchState('Sign in to search by photo.'); return; }
-      if (!asset.base64) { setMatchState('Choose a JPEG photo to search.'); return; }
-      setMatchState('Finding similar designs…');
-      try { const matches = await matchPhoto(asset.base64); setMatchedLooks(await looksByIds(matches)); setMatchState(matches.length ? 'Ranked by visual similarity.' : 'No indexed matches yet. Browse recent work below.'); }
-      catch (e) { setMatchState(`Search unavailable: ${friendlyError(e)}`); }
+      ++searchVersion.current;
+      setPhoto(asset.uri); setTab('Discover'); setScreen('results'); setMatchedLooks([]); setMatchScores({}); setMatchLoading(false);
+      inspiration.current = asset.base64 || null;
+      if (!asset.base64) { setMatchState('Could not read this photo. Please choose another image.'); return; }
+      await searchPhoto(asset.base64);
     } catch (e) { message('Photo', e); }
   }
   async function toggleSaved(lookId: string) {
@@ -184,7 +209,7 @@ export default function App() {
   function openLegal(key: LegalPageKey | 'account') { setLegalKey(key); setScreen('legal'); }
   function goBack() { if (screen === 'edit-look') setScreen('look'); else setScreen('home'); }
   const filteredLooks = looks.filter(look => [look.title, look.studios.name, look.studios.city].some(value => value.toLowerCase().includes(query.trim().toLowerCase())));
-  const grid = (items: Look[]) => <View style={styles.grid}>{items.map(look => <LookCard key={look.id} look={look} saved={saved.includes(look.id)} rating={studioRatings[look.studio_id]} favorite={() => toggleSaved(look.id)} onPress={() => { setSelected(look); setScreen('look'); }} />)}</View>;
+  const grid = (items: Look[], scores: Record<string, number> = {}) => <View style={styles.grid}>{items.map(look => <LookCard key={look.id} look={look} matchPercent={scores[look.id]} saved={saved.includes(look.id)} rating={studioRatings[look.studio_id]} favorite={() => toggleSaved(look.id)} onPress={() => { setSelected(look); setScreen('look'); }} />)}</View>;
 
   const profileSavedLooks = looks.filter(look => saved.includes(look.id));
   const profileAppointments = session ? (role === 'artist' && studio ? bookings.filter(b => b.studio_id === studio.id) : bookings.filter(b => b.client_id === session.user.id)) : [];
@@ -211,7 +236,7 @@ export default function App() {
     : screen === 'legal' ? <LegalScreen pageKey={legalKey} onOpen={openLegal} onDelete={async () => { await deleteMyAccount(); setSelectedBooking(null); setSelected(null); setScreen('home'); setTab('Discover'); }} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'reviews' && reviewStudio ? <StudioReviewsScreen studio={reviewStudio} />
     : screen === 'look' && selected ? <><View style={styles.lookHeroWrap}><Image source={{ uri: selected.image_url }} style={styles.heroImage} />{ownsSelectedLook && <Pressable style={styles.editFab} onPress={() => setScreen('edit-look')}><Text style={styles.editFabIcon}>✎</Text></Pressable>}</View><View style={styles.lookTitleRow}><View style={{flex:1}}><Text style={styles.eyebrow}>NAIL STUDIO · {selected.studios.city.toUpperCase()}</Text><Text style={styles.title}>{selected.studios.name}</Text></View>{ownsSelectedLook && <View style={styles.ownerBadge}><Text style={styles.ownerBadgeText}>YOUR DESIGN</Text></View>}</View><Text style={styles.body}>{selected.studios.bio || 'Discover the artist behind this look.'}</Text><Pressable style={styles.reviewsButton} onPress={() => openStudioReviews(selected.studios)}><View style={styles.reviewsButtonIcon}><Text style={styles.reviewsButtonStar}>★</Text></View><View style={{flex:1}}><Text style={styles.reviewsButtonTitle}>Studio reviews</Text><Text style={styles.reviewsButtonMeta}>{studioRatings[selected.studio_id]?.rating_count ? `${studioRatings[selected.studio_id].avg_rating?.toFixed(1)} · ${studioRatings[selected.studio_id].rating_count} verified ratings` : 'No reviews yet'}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable><View style={styles.pill}><Text style={styles.pillText}>✦ {selected.title}  ·  From €{selected.price_eur}</Text></View>{ownsSelectedLook ? <View style={styles.ownerNotice}><Text style={styles.ownerNoticeTitle}>Studio owner view</Text><Text style={styles.ownerNoticeText}>You cannot book your own studio. Use the edit button to update this design or open your studio dashboard to manage availability.</Text><Button label="Open studio dashboard" secondary onPress={() => setScreen('studio')} /></View> : <><Text style={styles.section}>Available appointments</Text>{slots.length ? slots.map(slot => <Pressable key={slot.id} style={styles.slot} onPress={() => requestBooking(slot)} disabled={busy}><Text style={styles.slotText}>{formatTime(slot.starts_at)}</Text><Text style={styles.link}>{busy ? 'Please wait' : 'Request →'}</Text></Pressable>) : <Text style={styles.body}>No free times listed yet.</Text>}</>}{selected.studios.address && <Text style={styles.body}>⌖ {selected.studios.address}, {selected.studios.city}</Text>}</>
-    : screen === 'results' ? <><Text style={styles.eyebrow}>YOUR INSPIRATION</Text><Text style={styles.title}>Find your look.</Text>{photo && <Pressable style={styles.uploaded} onPress={choosePhoto}><Image source={{ uri: photo }} style={styles.thumb} /><Text style={styles.cardTitle}>Your photo  ·  Change</Text></Pressable>}<Text style={styles.section}>Studio work</Text><Text style={styles.body}>{matchState}</Text>{grid(matchedLooks.length ? matchedLooks : looks)}</>
+    : screen === 'results' ? <><Text style={styles.eyebrow}>YOUR INSPIRATION</Text><Text style={styles.title}>Find your look.</Text>{photo && <Pressable style={styles.uploaded} onPress={choosePhoto}><Image source={{ uri: photo }} style={styles.thumb} /><Text style={styles.cardTitle}>Your photo  ·  Change</Text></Pressable>}<Text style={styles.section}>Similar designs</Text><Text style={styles.body}>{matchState}</Text>{matchLoading ? <ActivityIndicator color={colors.coral} accessibilityLabel="Finding similar designs" /> : <>{!session && <Button label="Sign in to search" onPress={() => setScreen('auth')} />}{inspiration.current && <Button label="Search this photo again" secondary onPress={() => { if (inspiration.current) void searchPhoto(inspiration.current); }} />}{matchedLooks.length ? grid(matchedLooks, matchScores) : <Empty title="No matches to show" detail="Search results will appear here after your photo is compared with indexed studio designs." />}</>}</>
     : tab === 'Discover' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.eyebrow}>YOUR NEXT NAIL MOMENT</Text><Text style={styles.headline}>Find the nails{'\n'}you love.</Text><Text style={styles.body}>From inspiration to the artist who can make it yours.</Text>{upcomingAppointment && <Pressable style={styles.upcomingCard} onPress={() => openAppointment(upcomingAppointment)}><View style={styles.upcomingIcon}><Text style={styles.upcomingIconText}>▤</Text></View><View style={{flex:1}}><Text style={styles.upcomingLabel}>{upcomingAppointment.studios?.owner_id === session?.user.id ? 'UPCOMING CLIENT APPOINTMENT' : 'YOUR NEXT APPOINTMENT'}</Text><Text style={styles.upcomingTitle}>{upcomingAppointment.studios?.name || 'Nail studio'}</Text><Text style={styles.upcomingMeta}>{formatTime(upcomingAppointment.starts_at)} · {upcomingAppointment.status}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>}<Pressable style={styles.upload} onPress={choosePhoto}><Text style={styles.camera}>▧</Text><View><Text style={styles.cardTitle}>Upload inspiration</Text><Text style={styles.caption}>Choose a photo from your gallery</Text></View></Pressable><Text style={styles.section}>Explore nail looks</Text><TextInput value={query} onChangeText={setQuery} placeholder="Search design, studio or city" placeholderTextColor="#ad9ca5" style={[styles.input, { marginBottom: 20 }]} />{looks.length ? grid(filteredLooks) : <Empty title="The gallery is growing" detail="Studios will appear here once they publish their first designs." />}</>
     : tab === 'Saved' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Saved looks</Text>{!session ? <Button label="Sign in to save looks" onPress={() => setScreen('auth')} /> : saved.length ? grid(looks.filter(look => saved.includes(look.id))) : <Empty title="Your collection starts here" detail="Tap the heart on a nail look to save it." />}</>
     : tab === 'Bookings' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Appointments</Text>{!session ? <Button label="Sign in to view bookings" onPress={() => setScreen('auth')} /> : bookings.filter(b => b.client_id === session.user.id).length ? bookings.filter(b => b.client_id === session.user.id).map(b => <Pressable key={b.id} style={styles.appointmentListCard} onPress={() => openAppointment(b)}>{b.portfolio_looks?.image_url ? <Image source={{uri:b.portfolio_looks.image_url}} style={styles.appointmentThumb}/> : <View style={styles.appointmentThumbFallback}><Text style={styles.appointmentThumbIcon}>▤</Text></View>}<View style={{flex:1}}><Text style={styles.cardTitle}>{b.studios?.name || 'Nail studio'}</Text><Text style={styles.caption}>{formatTime(b.starts_at)}</Text><Text style={styles.appointmentStatus}>{b.status.toUpperCase()}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>) : <Empty title="Nothing booked yet" detail="Choose a studio and request an available time." />}</>
@@ -349,7 +374,13 @@ function EditLookScreen({ look, onSaved, notify }: { look: Look; onSaved: (look:
     setBusy(true);
     try {
       let updated = await updateLook(look.id, title, numericPrice);
-      if (image) updated = await replaceLookImage(updated, image);
+      if (image) {
+        updated = await replaceLookImage(updated, image);
+        if (matchingConfigured()) {
+          try { await indexLook(updated.id); }
+          catch (e) { notify('Photo updated', `Visual indexing is pending: ${friendlyError(e)}`, 'info'); }
+        }
+      }
       await onSaved(updated);
     } catch (e) { notify('Could not update design', friendlyError(e), 'error'); } finally { setBusy(false); }
   }
@@ -426,6 +457,11 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onO
 }
 
 const styles = StyleSheet.create({
+  matchPanel: { backgroundColor: '#fce8e4', borderRadius: 10, padding: 9, marginBottom: 10 },
+  matchLabel: { color: colors.ink, fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
+  matchValue: { color: '#97483f', fontSize: 17, fontWeight: '800' },
+  matchTrack: { height: 5, backgroundColor: '#f4cdc7', borderRadius: 3, marginTop: 6, overflow: 'hidden' },
+  matchFill: { height: 5, backgroundColor: colors.coral, borderRadius: 3 },
   safe: { flex: 1, backgroundColor: colors.canvas }, keyboardAvoider: { flex: 1 }, content: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 120 }, brand: { fontSize: 31, fontWeight: '800', color: colors.ink, letterSpacing: -1.5, marginBottom: 40 }, eyebrow: { color: colors.coral, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12 }, headline: { fontFamily: 'Georgia', fontSize: 44, lineHeight: 51, color: colors.ink, marginBottom: 12 }, title: { fontFamily: 'Georgia', fontSize: 36, color: colors.ink, marginBottom: 16 }, section: { fontFamily: 'Georgia', fontSize: 23, color: colors.ink, marginTop: 28, marginBottom: 16 }, body: { color: colors.muted, fontSize: 15, lineHeight: 23, marginBottom: 20 },
   button: { backgroundColor: colors.coral, borderRadius: 16, padding: 17, alignItems: 'center', marginVertical: 6 }, secondaryButton: { backgroundColor: colors.blush }, buttonText: { color: 'white', fontSize: 15, fontWeight: '700' },
   upload: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.blush, padding: 17, borderRadius: 22, marginTop: 12, marginBottom: 12 }, camera: { backgroundColor: '#f6ccc6', borderRadius: 16, padding: 13, fontSize: 25, color: colors.ink, marginRight: 13 },
