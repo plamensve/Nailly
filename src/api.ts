@@ -10,6 +10,7 @@ export type Booking = { id: string; studio_id: string; client_id: string; client
 export type RatingSummary = { avg_rating: number | null; rating_count: number };
 export type BookingRating = { id: string; booking_id: string; rater_id: string; target_type: 'studio' | 'client'; rating: number; comment: string };
 export type StudioReview = { booking_id: string; rating: number; comment: string; created_at: string };
+export type StudioPhoto = { id: string; studio_id: string; image_url: string; storage_path: string; sort_order: number; created_at: string };
 
 export async function listLooks(): Promise<Look[]> {
   const { data, error } = await supabase.from('portfolio_looks').select('id,studio_id,title,image_url,storage_path,price_eur,studios(id,owner_id,name,city,address,bio,phone)').eq('published', true).order('created_at', { ascending: false }).limit(100);
@@ -133,3 +134,26 @@ export async function deleteMyAccount() {
   await supabase.auth.signOut();
 }
 export function friendlyError(error: unknown) { return error instanceof Error ? error.message : String(error); }
+
+
+export async function listStudioPhotos(studioId: string): Promise<StudioPhoto[]> {
+  const { data, error } = await supabase.from('studio_photos').select('id,studio_id,image_url,storage_path,sort_order,created_at').eq('studio_id', studioId).order('sort_order').order('created_at');
+  if (error) throw error;
+  return (data || []) as StudioPhoto[];
+}
+export async function uploadStudioPhoto(studioId: string, asset: ImagePicker.ImagePickerAsset) {
+  if (!asset.base64) throw new Error('Could not read the selected studio photo.');
+  const file = `${studioId}/studio/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const { error: uploadError } = await supabase.storage.from('portfolio').upload(file, decode(asset.base64), { contentType: 'image/jpeg', upsert: false });
+  if (uploadError) throw uploadError;
+  const { data: publicData } = supabase.storage.from('portfolio').getPublicUrl(file);
+  const { data, error } = await supabase.from('studio_photos').insert({ studio_id: studioId, image_url: publicData.publicUrl, storage_path: file }).select('id,studio_id,image_url,storage_path,sort_order,created_at').single();
+  if (error) { await supabase.storage.from('portfolio').remove([file]); throw error; }
+  return data as StudioPhoto;
+}
+export async function deleteStudioPhoto(photo: StudioPhoto) {
+  const { error } = await supabase.from('studio_photos').delete().eq('id', photo.id);
+  if (error) throw error;
+  const { error: storageError } = await supabase.storage.from('portfolio').remove([photo.storage_path]);
+  if (storageError) throw storageError;
+}
