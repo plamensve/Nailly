@@ -164,3 +164,12 @@ export async function reorderStudioPhotos(studioId: string, photos: StudioPhoto[
   const failed = results.find(result => result.error);
   if (failed?.error) throw failed.error;
 }
+
+export async function deleteLook(look: Look) {
+  const { error } = await supabase.from('portfolio_looks').delete().eq('id', look.id).eq('studio_id', look.studio_id);
+  if (error) throw error;
+  if (look.storage_path) {
+    const { error: storageError } = await supabase.storage.from('portfolio').remove([look.storage_path]);
+    if (storageError) throw storageError;
+  }
+}
