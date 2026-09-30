@@ -13,7 +13,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+
+# Install CPU-only PyTorch wheels first. This avoids pulling the very large
+# CUDA/NVIDIA dependency stack that is not needed on the CPU-only Lightsail
+# container service.
 RUN pip install --upgrade pip \
+    && pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.5,<3" "torchvision>=0.20,<1" \
     && pip install -r requirements.txt
 
 # Download the OpenCLIP weights at image-build time so the production
