@@ -44,13 +44,13 @@ export async function uploadAvatar(userId: string, asset: ImagePicker.ImagePicke
   if (error) { await supabase.storage.from('avatars').remove([file]); throw error; }
   return data.publicUrl;
 }
-export async function uploadLook(studioId: string, title: string, price: number, asset: ImagePicker.ImagePickerAsset) {
+export async function uploadLook(studioId: string, title: string, price: number, asset: ImagePicker.ImagePickerAsset, attributes?: { shape:string; length:string; style:string; finish:string; colors:string[] }) {
   if (!asset.base64) throw new Error('Could not read the selected image. Please choose a JPEG photo.');
   const file = `${studioId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
   const { error: uploadError } = await supabase.storage.from('portfolio').upload(file, decode(asset.base64), { contentType: 'image/jpeg', upsert: false });
   if (uploadError) throw uploadError;
   const { data } = supabase.storage.from('portfolio').getPublicUrl(file);
-  const { data: created, error } = await supabase.from('portfolio_looks').insert({ studio_id: studioId, title, price_eur: price, image_url: data.publicUrl, storage_path: file, published: true }).select('id').single();
+  const { data: created, error } = await supabase.from('portfolio_looks').insert({ studio_id: studioId, title, price_eur: price, image_url: data.publicUrl, storage_path: file, published: true, nail_attributes: attributes || null }).select('id').single();
   if (error) {
     await supabase.storage.from('portfolio').remove([file]);
     throw error;
