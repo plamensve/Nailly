@@ -30,8 +30,32 @@ def model_and_transform():
     model, _, transform = open_clip.create_model_and_transforms(
         'ViT-B-32', pretrained='laion2b_s34b_b79k', device='cpu'
     )
+    tokenizer = open_clip.get_tokenizer('ViT-B-32')
     model.eval()
-    return model, transform
+    return model, transform, tokenizer
+
+@lru_cache(maxsize=1)
+def nail_text_features():
+    model, _, tokenizer = model_and_transform()
+    labels = [
+        'a close-up photo of manicured fingernails with nail art',
+        'a photo of a manicure on a human hand',
+        'a close-up photo of painted fingernails',
+        'a photo of something unrelated to fingernails or manicure',
+    ]
+    with torch.inference_mode():
+        features = model.encode_text(tokenizer(labels))
+        features = features / features.norm(dim=-1, keepdim=True)
+    return features
+
+def nail_confidence(picture: Image.Image) -> float:
+    model, transform, _ = model_and_transform()
+    with torch.inference_mode():
+        image_features = model.encode_image(transform(picture).unsqueeze(0))
+        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        logits = (100.0 * image_features @ nail_text_features().T).softmax(dim=-1)[0]
+    # First three prompts are nail/manicure concepts; the final prompt is the negative class.
+    return float(logits[:3].sum().item())
 
 
 def authenticated_user(authorization: str = Header(default='')) -> str:
@@ -53,7 +77,7 @@ def image_embedding(raw: bytes) -> list[float]:
         picture = Image.open(io.BytesIO(raw))
         picture.verify()
         picture = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert('RGB')
-        model, transform = model_and_transform()
+        model, transform, _ = model_and_transform()
         with torch.inference_mode():
             features = model.encode_image(transform(picture).unsqueeze(0))
             features = features / features.norm(dim=-1, keepdim=True)
@@ -72,6 +96,13 @@ def search(query: ImageQuery, user_id: str = Depends(authenticated_user)):
         raw = base64.b64decode(query.image_base64, validate=True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail='Invalid base64') from exc
+    try:
+        picture = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert('RGB')
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+        raise HTTPException(status_code=400, detail='Invalid image') from exc
+    confidence = nail_confidence(picture)
+    if confidence < 0.55:
+        raise HTTPException(status_code=422, detail='This photo does not look like a manicure or nail design. Choose a clear close-up photo of nails.')
     embedding = image_embedding(raw)
     db = database()
     params = {'query_embedding': embedding, 'result_limit': 30}
@@ -85,7 +116,7 @@ def search(query: ImageQuery, user_id: str = Depends(authenticated_user)):
     matches = rank_matches(result.data or [])
     if not matches:
         raise HTTPException(status_code=503, detail='No indexed studio photos are available. The matching server must finish portfolio indexing before photo search can return results.')
-    return {'results': matches, 'model': MODEL_NAME, 'score_type': 'cosine_similarity', 'indexing': repaired}
+    return {'results': matches, 'model': MODEL_NAME, 'score_type': 'calibrated_visual_match', 'nail_confidence': round(confidence, 3), 'indexing': repaired}
 
 
 @app.post('/index/{look_id}')
