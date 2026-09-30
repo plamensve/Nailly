@@ -48,11 +48,15 @@ def nail_text_features():
         features = features / features.norm(dim=-1, keepdim=True)
     return features
 
-def nail_confidence(picture: Image.Image) -> float:
+def normalized_image_features(picture: Image.Image):
     model, transform, _ = model_and_transform()
     with torch.inference_mode():
-        image_features = model.encode_image(transform(picture).unsqueeze(0))
-        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        features = model.encode_image(transform(picture).unsqueeze(0))
+        return features / features.norm(dim=-1, keepdim=True)
+
+
+def nail_confidence_from_features(image_features) -> float:
+    with torch.inference_mode():
         logits = (100.0 * image_features @ nail_text_features().T).softmax(dim=-1)[0]
     # First three prompts are nail/manicure concepts; the final prompt is the negative class.
     return float(logits[:3].sum().item())
@@ -77,10 +81,7 @@ def image_embedding(raw: bytes) -> list[float]:
         picture = Image.open(io.BytesIO(raw))
         picture.verify()
         picture = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert('RGB')
-        model, transform, _ = model_and_transform()
-        with torch.inference_mode():
-            features = model.encode_image(transform(picture).unsqueeze(0))
-            features = features / features.norm(dim=-1, keepdim=True)
+        features = normalized_image_features(picture)
         return features[0].float().tolist()
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
         raise HTTPException(status_code=400, detail='Invalid image') from exc
@@ -100,10 +101,13 @@ def search(query: ImageQuery, user_id: str = Depends(authenticated_user)):
         picture = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert('RGB')
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
         raise HTTPException(status_code=400, detail='Invalid image') from exc
-    confidence = nail_confidence(picture)
+    # Encode the query only once. Previously /search ran CLIP twice (validation +
+    # embedding), which made CPU cold starts much more likely to exceed mobile timeouts.
+    image_features = normalized_image_features(picture)
+    confidence = nail_confidence_from_features(image_features)
     if confidence < 0.55:
         raise HTTPException(status_code=422, detail='This photo does not look like a manicure or nail design. Choose a clear close-up photo of nails.')
-    embedding = image_embedding(raw)
+    embedding = image_features[0].float().tolist()
     db = database()
     params = {'query_embedding': embedding, 'result_limit': 30}
     result = db.rpc('match_nail_looks', params).execute()
