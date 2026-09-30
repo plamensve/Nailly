@@ -56,6 +56,7 @@ export default function App() {
   const [matchFailed, setMatchFailed] = useState(false);
   const [photoPicking, setPhotoPicking] = useState(false);
   const searchVersion = useRef(0);
+  const mainScrollRef = useRef<ScrollView>(null);
   const inspiration = useRef<string | null>(null);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
@@ -146,6 +147,9 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [session?.user.id, refresh]);
   useEffect(() => { if (selected) listSlots(selected.studio_id).then(setSlots).catch(e => setError(friendlyError(e))); }, [selected]);
+  useEffect(() => {
+    requestAnimationFrame(() => mainScrollRef.current?.scrollTo({ y: 0, animated: false }));
+  }, [screen, selected?.id]);
 
   useEffect(() => {
     ++searchVersion.current;
@@ -242,7 +246,7 @@ export default function App() {
   const ownsSelectedLook = Boolean(session && selected && selected.studios.owner_id === session.user.id);
   const renderLegalMenu = () => <View style={styles.legalMenu}><Text style={styles.sectionSmall}>Legal & privacy</Text><Pressable style={styles.settingsRow} onPress={() => openLegal('privacy')}><View><Text style={styles.settingsTitle}>Privacy Policy</Text><Text style={styles.settingsCaption}>How Nailly handles your data</Text></View><Text style={styles.rowChevron}>›</Text></Pressable><Pressable style={styles.settingsRow} onPress={() => openLegal('terms')}><View><Text style={styles.settingsTitle}>Terms of Service</Text><Text style={styles.settingsCaption}>Rules for clients and artists</Text></View><Text style={styles.rowChevron}>›</Text></Pressable><Pressable style={styles.settingsRow} onPress={() => openLegal('gdpr')}><View><Text style={styles.settingsTitle}>Privacy & GDPR rights</Text><Text style={styles.settingsCaption}>Access, correction and deletion rights</Text></View><Text style={styles.rowChevron}>›</Text></Pressable><Pressable style={styles.settingsRow} onPress={() => openLegal('community')}><View><Text style={styles.settingsTitle}>Community Guidelines</Text><Text style={styles.settingsCaption}>Content, bookings and review standards</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>{session && <Pressable style={[styles.settingsRow,styles.dangerRow]} onPress={() => openLegal('account')}><View><Text style={styles.dangerTitle}>Delete account & data</Text><Text style={styles.settingsCaption}>Permanently remove your Nailly account</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>}</View>;
 
-  return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}><ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.content}>
+  return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}><ScrollView ref={mainScrollRef} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.content}>
     {screen !== 'home' && <Pressable onPress={goBack}><Text style={styles.back}>‹ Back</Text></Pressable>}
     {screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} />
     : screen === 'studio' ? <StudioScreen session={session} studio={studio} looks={looks} bookings={bookings} onRefresh={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} onOpenBooking={openAppointment} onOpenReviews={openStudioReviews} onOpenLook={(look) => { setSelected(look); setScreen('look'); }} onStudioCreated={async () => { await refresh(session?.user.id); setToast({title:'Studio created',detail:'Your studio is live. Add your first design or available appointment.',type:'success'}); }} />
