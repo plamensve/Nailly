@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
 
   // Profile
   profileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  brandCompact: { fontSize: 29, fontWeight: '800', color: colors.ink, letterSpacing: -1.4 },
+  brandCompact: { fontSize: 31, fontWeight: '800', color: colors.ink, letterSpacing: -1.5 },
   profileKicker: { color: colors.coral, fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
   profileCard: { backgroundColor: 'white', borderRadius: 26, borderWidth: 1, borderColor: colors.edge, paddingHorizontal: 20, paddingVertical: 24, alignItems: 'center', shadowColor: '#452638', shadowOpacity: 0.07, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
   avatarPress: { width: 108, height: 108, alignItems: 'center', justifyContent: 'center', position: 'relative' },
