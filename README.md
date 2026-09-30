@@ -54,3 +54,9 @@ python -m unittest discover -s matching_service -p 'test_*.py'
 ```
 
 Set `EXPO_PUBLIC_MATCH_API_URL` in `.env` to the reachable matching server and restart Expo. The existing visual-search SQL must be applied first. Run `python backfill.py` on that server to index existing portfolio photos. New designs and replaced photos request indexing automatically; failed indexing is reported and can be retried by backfill. Search covers indexed published designs, rather than the 100-item Discover gallery. Inspiration photos are processed in memory, not saved to portfolio storage. Test with an indexed photo itself (expected near 100%), a similar design and an unrelated design before launch.
+
+### Missing identical-photo matches
+
+A photo in the gallery is not searchable until its vector is stored in `look_embeddings`. The matching server now repairs up to 20 missing published portfolio vectors when the initial search finds an empty index, skipping broken files without blocking the other designs. Run `backfill.py` in advance for larger galleries. This repair requires the Python server to be running with its Supabase server credentials; Expo alone cannot execute OpenCLIP. Without `EXPO_PUBLIC_MATCH_API_URL`, the app displays the configuration problem explicitly.
+
+During search, a processing panel remains visible. **Remove photo · Show all studios** clears the image, results and text filter and returns to Discover. Responses from an older search are ignored after removal. The server processes the query and indexes portfolio images; the uploaded inspiration is not saved.
