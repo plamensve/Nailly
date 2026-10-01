@@ -20,12 +20,7 @@
     "android": {
       "package": "com.nailly.app",
       "versionCode": 1,
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/android-adaptive-foreground.png",
-        "backgroundColor": "#fce8e4"
-      },
-      "permissions": [],
-      "edgeToEdgeEnabled": true
+      "permissions": []
     },
     "plugins": [
       [
