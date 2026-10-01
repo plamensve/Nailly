@@ -219,7 +219,8 @@ export default function App() {
         const accessToken = getParam('access_token');
         const refreshToken = getParam('refresh_token');
         const type = getParam('type');
-        const isRecovery = type === 'recovery' || parsed.searchParams.get('type') === 'recovery' || hashParams.get('type') === 'recovery';
+        const isNativeRecoveryCallback = parsed.protocol === 'nailly:' && parsed.hostname === 'auth' && parsed.pathname === '/callback';
+        const isRecovery = type === 'recovery' || parsed.searchParams.get('type') === 'recovery' || hashParams.get('type') === 'recovery' || isNativeRecoveryCallback;
 
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
