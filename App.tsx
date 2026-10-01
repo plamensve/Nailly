@@ -1030,6 +1030,7 @@ function SettingsScreen({
   const [passwordBusy,setPasswordBusy]=useState(false);
   const [showBlocked,setShowBlocked]=useState(false);
   const [blockedAccounts,setBlockedAccounts]=useState<Array<{id:string;name:string;city:string|null;avatar_url:string|null}>>([]);
+  const [blockedCount,setBlockedCount]=useState(0);
   const [blockedLoading,setBlockedLoading]=useState(false);
   const [unblockingId,setUnblockingId]=useState<string|null>(null);
 
@@ -1057,6 +1058,7 @@ function SettingsScreen({
       const {data:blocks,error:blocksError}=await supabase.from('blocked_users').select('blocked_id').eq('blocker_id',session.user.id);
       if(blocksError) throw blocksError;
       const ids=(blocks||[]).map(row=>row.blocked_id);
+      setBlockedCount(ids.length);
       if(!ids.length){setBlockedAccounts([]);return;}
       const [studiosResult,profilesResult]=await Promise.all([
         supabase.from('studios').select('owner_id,name,city').in('owner_id',ids),
@@ -1095,6 +1097,7 @@ function SettingsScreen({
       const {error}=await supabase.from('blocked_users').delete().eq('blocker_id',session.user.id).eq('blocked_id',account.id);
       if(error) throw error;
       setBlockedAccounts(current=>current.filter(item=>item.id!==account.id));
+      setBlockedCount(current=>Math.max(0,current-1));
       await onBlocksChanged();
       notify('Studio unblocked',`${account.name} can now appear in Discover and visual search again.`,'success');
     }catch(e){
@@ -1103,6 +1106,8 @@ function SettingsScreen({
       setUnblockingId(null);
     }
   }
+
+  useEffect(()=>{ void loadBlockedAccounts(); },[]);
 
   async function signOut(){
     const {error}=await supabase.auth.signOut();
@@ -1146,6 +1151,23 @@ function SettingsScreen({
       </View>}
     </View>
 
+    <Text style={styles.settingsSectionLabel}>SAFETY & PRIVACY</Text>
+    <View style={styles.settingsSafetyCard}>
+      <Pressable style={styles.settingsSafetyHeader} onPress={()=>void toggleBlockedSection()}>
+        <View style={styles.settingsSafetyIcon}><Text style={styles.settingsSafetyIconText}>⊘</Text></View>
+        <View style={{flex:1}}>
+          <View style={styles.settingsSafetyTitleRow}><Text style={styles.settingsSafetyTitle}>Blocked studios</Text>{blockedCount>0&&<View style={styles.settingsBlockedCount}><Text style={styles.settingsBlockedCountText}>{blockedCount}</Text></View>}</View>
+          <Text style={styles.settingsSafetyText}>Studios you block are hidden from Discover and visual search. You can unblock them here anytime.</Text>
+        </View>
+        <Text style={styles.settingsSafetyArrow}>{showBlocked?'⌃':'›'}</Text>
+      </Pressable>
+      {showBlocked&&<View style={styles.blockedSettingsPanel}>
+        {blockedLoading?<View style={styles.blockedSettingsLoading}><ActivityIndicator color={colors.coral}/><Text style={styles.settingsItemText}>Loading blocked studios…</Text></View>
+        :blockedAccounts.length?blockedAccounts.map(account=><View key={account.id} style={styles.blockedAccountRow}>{account.avatar_url?<Image source={{uri:account.avatar_url}} style={styles.blockedAccountAvatar}/>:<View style={styles.blockedAccountFallback}><Text style={styles.blockedAccountFallbackText}>{account.name.charAt(0).toUpperCase()}</Text></View>}<View style={{flex:1}}><Text style={styles.blockedAccountName}>{account.name}</Text><Text style={styles.blockedAccountMeta}>{account.city?account.city:'Hidden from your Nailly experience'}</Text></View><Pressable disabled={unblockingId===account.id} style={[styles.unblockButton,unblockingId===account.id&&{opacity:.55}]} onPress={()=>void unblockAccount(account)}>{unblockingId===account.id?<ActivityIndicator size="small" color="#9c5f7c"/>:<Text style={styles.unblockButtonText}>Unblock</Text>}</Pressable></View>)
+        :<View style={styles.blockedEmpty}><Text style={styles.blockedEmptyIcon}>♡</Text><Text style={styles.blockedEmptyTitle}>No blocked studios</Text><Text style={styles.blockedEmptyText}>Studios you block will appear here so you can restore them later.</Text></View>}
+      </View>}
+    </View>
+
     <Text style={styles.settingsSectionLabel}>HELP & SUPPORT</Text>
     <View style={styles.settingsGroup}>
       <Pressable style={styles.settingsItem} onPress={onContact}>
@@ -1161,12 +1183,6 @@ function SettingsScreen({
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('gdpr')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✓</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy & GDPR rights</Text><Text style={styles.settingsItemText}>Access, correction and deletion rights.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('terms')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>§</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Terms of Service</Text><Text style={styles.settingsItemText}>Rules for using Nailly as a client or artist.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('community')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✦</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Community Guidelines</Text><Text style={styles.settingsItemText}>Standards for content, reviews and behaviour.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
-      <Pressable style={styles.settingsItem} onPress={()=>void toggleBlockedSection()}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>⊘</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Blocked studios</Text><Text style={styles.settingsItemText}>Review studios you have hidden and unblock them anytime.</Text></View><Text style={styles.settingsItemArrow}>{showBlocked?'⌃':'›'}</Text></Pressable>
-      {showBlocked&&<View style={styles.blockedSettingsPanel}>
-        {blockedLoading?<View style={styles.blockedSettingsLoading}><ActivityIndicator color={colors.coral}/><Text style={styles.settingsItemText}>Loading blocked studios…</Text></View>
-        :blockedAccounts.length?blockedAccounts.map(account=><View key={account.id} style={styles.blockedAccountRow}>{account.avatar_url?<Image source={{uri:account.avatar_url}} style={styles.blockedAccountAvatar}/>:<View style={styles.blockedAccountFallback}><Text style={styles.blockedAccountFallbackText}>{account.name.charAt(0).toUpperCase()}</Text></View>}<View style={{flex:1}}><Text style={styles.blockedAccountName}>{account.name}</Text><Text style={styles.blockedAccountMeta}>{account.city?account.city:'Hidden from your Nailly experience'}</Text></View><Pressable disabled={unblockingId===account.id} style={[styles.unblockButton,unblockingId===account.id&&{opacity:.55}]} onPress={()=>void unblockAccount(account)}>{unblockingId===account.id?<ActivityIndicator size="small" color="#9c5f7c"/>:<Text style={styles.unblockButtonText}>Unblock</Text>}</Pressable></View>)
-        :<View style={styles.blockedEmpty}><Text style={styles.blockedEmptyIcon}>♡</Text><Text style={styles.blockedEmptyTitle}>No blocked studios</Text><Text style={styles.blockedEmptyText}>Studios you block will appear here so you can restore them later.</Text></View>}
-      </View>}
       <Pressable style={[styles.settingsItem,styles.settingsDangerItem]} onPress={onDeleteAccount}><View style={[styles.settingsItemIcon,styles.settingsDangerIcon]}><Text style={styles.settingsDangerIconText}>!</Text></View><View style={{flex:1}}><Text style={styles.settingsDangerTitle}>Delete account & data</Text><Text style={styles.settingsItemText}>Permanently remove your Nailly account.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
     </View>
 
@@ -1938,6 +1954,16 @@ const styles = StyleSheet.create({
   settingsDangerIcon: { backgroundColor: '#fff0f1' },
   settingsDangerIconText: { color: '#b65361', fontSize: 14, fontWeight: '900' },
   settingsDangerTitle: { color: '#a94855', fontSize: 11, fontWeight: '900' },
+  settingsSafetyCard: { backgroundColor: '#fff8fb', borderRadius: 22, borderWidth: 1, borderColor: '#ead7e2', overflow: 'hidden', marginBottom: 16, shadowColor: '#6f4058', shadowOpacity: .05, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
+  settingsSafetyHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 15 },
+  settingsSafetyIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: '#f8e7ef', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  settingsSafetyIconText: { color: '#9f5c7e', fontSize: 19, fontWeight: '900' },
+  settingsSafetyTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  settingsSafetyTitle: { color: colors.ink, fontSize: 12, fontWeight: '900' },
+  settingsSafetyText: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 3, paddingRight: 6 },
+  settingsSafetyArrow: { color: '#aa7890', fontSize: 22, marginLeft: 6 },
+  settingsBlockedCount: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: '#8f5775', alignItems: 'center', justifyContent: 'center', marginLeft: 7, paddingHorizontal: 6 },
+  settingsBlockedCountText: { color: 'white', fontSize: 8, fontWeight: '900' },
   blockedSettingsPanel: { backgroundColor: '#fff9fb', borderTopWidth: 1, borderTopColor: '#f1e3e9', padding: 11 },
   blockedSettingsLoading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 18 },
   blockedAccountRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 16, borderWidth: 1, borderColor: '#efe1e7', padding: 10, marginBottom: 8 },
