@@ -328,10 +328,12 @@ export default function App() {
     try {
       const matches = await matchPhoto(base64);
       const results = await looksByIds(matches.map(match => match.look_id));
+      const visibleResults = results.filter(look => !blockedUserIds.includes(look.studios.owner_id));
       if (version !== searchVersion.current) return;
-      setMatchedLooks(results);
-      setMatchScores(Object.fromEntries(matches.map(match => [match.look_id, match.match_percent])));
-      setMatchState(results.length ? `${results.length} designs ranked by visual similarity. Higher percentages mean closer visual matches, not a guarantee of identical nails.` : 'No searchable designs found yet. Try another photo or explore Discover.');
+      setMatchedLooks(visibleResults);
+      const visibleIds = new Set(visibleResults.map(look => look.id));
+      setMatchScores(Object.fromEntries(matches.filter(match => visibleIds.has(match.look_id)).map(match => [match.look_id, match.match_percent])));
+      setMatchState(visibleResults.length ? `${visibleResults.length} designs ranked by visual similarity. Higher percentages mean closer visual matches, not a guarantee of identical nails.` : 'No searchable designs found yet. Try another photo or explore Discover.');
     } catch (e) {
       if (version === searchVersion.current) {
         setMatchFailed(true);
@@ -403,6 +405,7 @@ export default function App() {
     setBlockModal(null);
     setBlockedUserIds(current=>current.includes(userId)?current:[...current,userId]);
     setLooks(current=>current.filter(look=>look.studios.owner_id!==userId));
+    setMatchedLooks(current=>current.filter(look=>look.studios.owner_id!==userId));
     if(selected?.studios.owner_id===userId){setSelected(null);setScreen('home');setTab('Discover');}
     setToast({title:'Account blocked',detail:`Content from ${displayName} is now hidden.`,type:'success'});
   }
@@ -512,7 +515,7 @@ export default function App() {
     : screen === 'feedback' && session ? <FeedbackCenterScreen session={session} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'admin-feedback' && session && isAdmin ? <AdminFeedbackInboxScreen session={session} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'admin-moderation' && session && isAdmin ? <AdminModerationScreen notify={(title,detail,type) => setToast({title,detail,type})} />
-    : screen === 'settings' && session ? <SettingsScreen session={session} onContact={()=>setScreen('contact')} onLegal={openLegal} onDeleteAccount={()=>openLegal('account')} onSignedOut={()=>{setScreen('home');setTab('Discover')}} notify={(title,detail,type)=>setToast({title,detail,type})} />
+    : screen === 'settings' && session ? <SettingsScreen session={session} onContact={()=>setScreen('contact')} onLegal={openLegal} onDeleteAccount={()=>openLegal('account')} onSignedOut={()=>{setScreen('home');setTab('Discover')}} onBlocksChanged={()=>refresh(session.user.id)} notify={(title,detail,type)=>setToast({title,detail,type})} />
     : screen === 'contact' ? <ContactScreen />
     : screen === 'legal' ? <LegalScreen pageKey={legalKey} onOpen={openLegal} onDelete={async () => { await deleteMyAccount(); setSelectedBooking(null); setSelected(null); setScreen('home'); setTab('Discover'); setToast({title:'Account deleted',detail:'Your Nailly account and associated data have been deleted.',type:'success'}); }} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'reviews' && reviewStudio ? <StudioReviewsScreen studio={reviewStudio} onReport={(bookingId)=>reportContent('review',bookingId,null)} />
@@ -1010,6 +1013,7 @@ function SettingsScreen({
   onLegal,
   onDeleteAccount,
   onSignedOut,
+  onBlocksChanged,
   notify
 }: {
   session: Session;
@@ -1017,12 +1021,17 @@ function SettingsScreen({
   onLegal: (key: LegalPageKey | 'account') => void;
   onDeleteAccount: () => void;
   onSignedOut: () => void;
+  onBlocksChanged: () => Promise<void>;
   notify: (title:string,detail:string,type?:'success'|'error'|'info') => void;
 }) {
   const [newPassword,setNewPassword]=useState('');
   const [confirmPassword,setConfirmPassword]=useState('');
   const [showPassword,setShowPassword]=useState(false);
   const [passwordBusy,setPasswordBusy]=useState(false);
+  const [showBlocked,setShowBlocked]=useState(false);
+  const [blockedAccounts,setBlockedAccounts]=useState<Array<{id:string;name:string;city:string|null;avatar_url:string|null}>>([]);
+  const [blockedLoading,setBlockedLoading]=useState(false);
+  const [unblockingId,setUnblockingId]=useState<string|null>(null);
 
   async function changePassword(){
     if(newPassword.length<8) return notify('Choose a stronger password','Use at least 8 characters for your new password.','info');
@@ -1039,6 +1048,59 @@ function SettingsScreen({
       notify('Could not change password',friendlyError(e),'error');
     }finally{
       setPasswordBusy(false);
+    }
+  }
+
+  async function loadBlockedAccounts(){
+    setBlockedLoading(true);
+    try{
+      const {data:blocks,error:blocksError}=await supabase.from('blocked_users').select('blocked_id').eq('blocker_id',session.user.id);
+      if(blocksError) throw blocksError;
+      const ids=(blocks||[]).map(row=>row.blocked_id);
+      if(!ids.length){setBlockedAccounts([]);return;}
+      const [studiosResult,profilesResult]=await Promise.all([
+        supabase.from('studios').select('owner_id,name,city').in('owner_id',ids),
+        supabase.from('profiles').select('id,display_name,avatar_url,city').in('id',ids)
+      ]);
+      if(studiosResult.error) throw studiosResult.error;
+      if(profilesResult.error) throw profilesResult.error;
+      const studioByOwner=new Map((studiosResult.data||[]).map(row=>[row.owner_id,row]));
+      const profileById=new Map((profilesResult.data||[]).map(row=>[row.id,row]));
+      setBlockedAccounts(ids.map(id=>{
+        const studio=studioByOwner.get(id) as any;
+        const profile=profileById.get(id) as any;
+        return {
+          id,
+          name:studio?.name||profile?.display_name||'Blocked Nailly account',
+          city:studio?.city||profile?.city||null,
+          avatar_url:profile?.avatar_url||null
+        };
+      }));
+    }catch(e){
+      notify('Could not load blocked studios',friendlyError(e),'error');
+    }finally{
+      setBlockedLoading(false);
+    }
+  }
+
+  async function toggleBlockedSection(){
+    const next=!showBlocked;
+    setShowBlocked(next);
+    if(next) await loadBlockedAccounts();
+  }
+
+  async function unblockAccount(account:{id:string;name:string}){
+    setUnblockingId(account.id);
+    try{
+      const {error}=await supabase.from('blocked_users').delete().eq('blocker_id',session.user.id).eq('blocked_id',account.id);
+      if(error) throw error;
+      setBlockedAccounts(current=>current.filter(item=>item.id!==account.id));
+      await onBlocksChanged();
+      notify('Studio unblocked',`${account.name} can now appear in Discover and visual search again.`,'success');
+    }catch(e){
+      notify('Could not unblock studio',friendlyError(e),'error');
+    }finally{
+      setUnblockingId(null);
     }
   }
 
@@ -1099,6 +1161,12 @@ function SettingsScreen({
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('gdpr')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✓</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy & GDPR rights</Text><Text style={styles.settingsItemText}>Access, correction and deletion rights.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('terms')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>§</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Terms of Service</Text><Text style={styles.settingsItemText}>Rules for using Nailly as a client or artist.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('community')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✦</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Community Guidelines</Text><Text style={styles.settingsItemText}>Standards for content, reviews and behaviour.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
+      <Pressable style={styles.settingsItem} onPress={()=>void toggleBlockedSection()}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>⊘</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Blocked studios</Text><Text style={styles.settingsItemText}>Review studios you have hidden and unblock them anytime.</Text></View><Text style={styles.settingsItemArrow}>{showBlocked?'⌃':'›'}</Text></Pressable>
+      {showBlocked&&<View style={styles.blockedSettingsPanel}>
+        {blockedLoading?<View style={styles.blockedSettingsLoading}><ActivityIndicator color={colors.coral}/><Text style={styles.settingsItemText}>Loading blocked studios…</Text></View>
+        :blockedAccounts.length?blockedAccounts.map(account=><View key={account.id} style={styles.blockedAccountRow}>{account.avatar_url?<Image source={{uri:account.avatar_url}} style={styles.blockedAccountAvatar}/>:<View style={styles.blockedAccountFallback}><Text style={styles.blockedAccountFallbackText}>{account.name.charAt(0).toUpperCase()}</Text></View>}<View style={{flex:1}}><Text style={styles.blockedAccountName}>{account.name}</Text><Text style={styles.blockedAccountMeta}>{account.city?account.city:'Hidden from your Nailly experience'}</Text></View><Pressable disabled={unblockingId===account.id} style={[styles.unblockButton,unblockingId===account.id&&{opacity:.55}]} onPress={()=>void unblockAccount(account)}>{unblockingId===account.id?<ActivityIndicator size="small" color="#9c5f7c"/>:<Text style={styles.unblockButtonText}>Unblock</Text>}</Pressable></View>)
+        :<View style={styles.blockedEmpty}><Text style={styles.blockedEmptyIcon}>♡</Text><Text style={styles.blockedEmptyTitle}>No blocked studios</Text><Text style={styles.blockedEmptyText}>Studios you block will appear here so you can restore them later.</Text></View>}
+      </View>}
       <Pressable style={[styles.settingsItem,styles.settingsDangerItem]} onPress={onDeleteAccount}><View style={[styles.settingsItemIcon,styles.settingsDangerIcon]}><Text style={styles.settingsDangerIconText}>!</Text></View><View style={{flex:1}}><Text style={styles.settingsDangerTitle}>Delete account & data</Text><Text style={styles.settingsItemText}>Permanently remove your Nailly account.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
     </View>
 
@@ -1870,6 +1938,20 @@ const styles = StyleSheet.create({
   settingsDangerIcon: { backgroundColor: '#fff0f1' },
   settingsDangerIconText: { color: '#b65361', fontSize: 14, fontWeight: '900' },
   settingsDangerTitle: { color: '#a94855', fontSize: 11, fontWeight: '900' },
+  blockedSettingsPanel: { backgroundColor: '#fff9fb', borderTopWidth: 1, borderTopColor: '#f1e3e9', padding: 11 },
+  blockedSettingsLoading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 18 },
+  blockedAccountRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 16, borderWidth: 1, borderColor: '#efe1e7', padding: 10, marginBottom: 8 },
+  blockedAccountAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.blush, marginRight: 10 },
+  blockedAccountFallback: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#f8e8ef', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  blockedAccountFallbackText: { color: '#ad6687', fontFamily: 'Georgia', fontSize: 17, fontWeight: '800' },
+  blockedAccountName: { color: colors.ink, fontSize: 10, fontWeight: '900' },
+  blockedAccountMeta: { color: colors.muted, fontSize: 8, marginTop: 2 },
+  unblockButton: { minHeight: 34, borderRadius: 12, backgroundColor: '#fff1f6', borderWidth: 1, borderColor: '#ead3de', paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  unblockButtonText: { color: '#9c5f7c', fontSize: 8, fontWeight: '900' },
+  blockedEmpty: { alignItems: 'center', paddingVertical: 18, paddingHorizontal: 16 },
+  blockedEmptyIcon: { color: '#cc87a5', fontSize: 24, marginBottom: 5 },
+  blockedEmptyTitle: { color: colors.ink, fontSize: 11, fontWeight: '900' },
+  blockedEmptyText: { color: colors.muted, fontSize: 8, lineHeight: 13, textAlign: 'center', marginTop: 4, maxWidth: 240 },
   settingsSignOut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 50, borderRadius: 16, backgroundColor: '#f8f3f5', paddingHorizontal: 15, marginTop: 2 },
   settingsSignOutText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
   settingsSignOutArrow: { color: colors.muted, fontSize: 16 },
