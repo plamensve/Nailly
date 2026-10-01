@@ -218,19 +218,10 @@ export default function App() {
         const code = getParam('code');
         const accessToken = getParam('access_token');
         const refreshToken = getParam('refresh_token');
-        const tokenHash = getParam('token_hash');
         const type = getParam('type');
         const isRecovery = type === 'recovery' || parsed.searchParams.get('type') === 'recovery' || hashParams.get('type') === 'recovery';
 
-        if (tokenHash && isRecovery) {
-          const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: 'recovery',
-          });
-          if (verifyError) throw verifyError;
-          if (!verifyData.session) throw new Error('Recovery session could not be created.');
-          setSession(verifyData.session);
-        } else if (code) {
+        if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
         } else if (accessToken && refreshToken) {
@@ -1424,7 +1415,7 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
     if(!resetEmail.trim()) return notify('Enter your email','Type the email address you use for Nailly.','info');
     setBusy(true);
     try{
-      const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim(),{redirectTo:'nailly://auth/callback?type=recovery'});
+      const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim(),{redirectTo:'https://naillyapp.com/auth/callback/?type=recovery'});
       if(error) throw error;
       setResetSent(true);
     }catch(e){
