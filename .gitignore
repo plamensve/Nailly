@@ -6,3 +6,7 @@ dist/
 __pycache__/
 *.pyc
 matching_service/.venv/
+.env.local
+*.ipa
+*.apk
+*.aab
