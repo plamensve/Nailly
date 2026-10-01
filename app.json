@@ -48,7 +48,10 @@
     "extra": {
       "supportUrl": "https://naillyapp.com/support.html",
       "privacyUrl": "https://naillyapp.com/privacy.html",
-      "accountDeletionUrl": "https://naillyapp.com/delete-account.html"
+      "accountDeletionUrl": "https://naillyapp.com/delete-account.html",
+      "eas": {
+        "projectId": "4e4f26f1-6ca9-43c0-a01e-b1ddcc763f63"
+      }
     },
     "icon": "./assets/icon.png"
   }
