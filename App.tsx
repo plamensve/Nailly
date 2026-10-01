@@ -893,10 +893,33 @@ function EditLookScreen({ look, onSaved, notify }: { look: Look; onSaved: (look:
   const [title, setTitle] = useState(look.title);
   const [price, setPrice] = useState(String(look.price_eur));
   const [image, setImage] = useState<ImagePickerAsset | null>(null);
+  const [imageValidated, setImageValidated] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  async function chooseReplacementImage() {
+    try {
+      const next = await pickPortfolioImage();
+      if (!next) return;
+      setImage(next);
+      setImageValidated(false);
+      if (!next.base64 || !matchingConfigured()) {
+        notify('Photo check unavailable','Nailly could not verify this image, so the existing design photo will remain unchanged until a verified image is selected.','info');
+        return;
+      }
+      try {
+        await analyzeNails(next.base64);
+        setImageValidated(true);
+        notify('Photo approved','This image passed the Nailly manicure check.','success');
+      } catch (e) {
+        setImageValidated(false);
+        notify('Photo not approved',friendlyError(e),'error');
+      }
+    } catch(e){ notify('Photo',friendlyError(e),'error'); }
+  }
   async function save() {
     const numericPrice = Number(price);
     if (!title.trim() || !Number.isFinite(numericPrice) || numericPrice < 0) return notify('Check design details', 'Add a design name and a valid price.', 'info');
+    if (image && !imageValidated) return notify('Photo needs approval','The replacement photo must pass the Nailly manicure check before it can be saved.','info');
     setBusy(true);
     try {
       let updated = await updateLook(look.id, title, numericPrice);
@@ -910,7 +933,7 @@ function EditLookScreen({ look, onSaved, notify }: { look: Look; onSaved: (look:
       await onSaved(updated);
     } catch (e) { notify('Could not update design', friendlyError(e), 'error'); } finally { setBusy(false); }
   }
-  return <><View style={styles.editScreenHead}><View><Text style={styles.profileKicker}>EDIT DESIGN</Text><Text style={styles.title}>Polish your look.</Text></View><View style={styles.editIconBadge}><Text style={styles.editIconBadgeText}>✎</Text></View></View><Pressable style={styles.editImageWrap} onPress={async()=>{try{setImage(await pickPortfolioImage())}catch(e){notify('Photo',friendlyError(e),'error')}}}><Image source={{uri:image?.uri || look.image_url}} style={styles.editImage}/><View style={styles.changeImagePill}><Text style={styles.changeImageText}>✎ Change photo</Text></View></Pressable><View style={styles.formCard}><Field label="Design name" value={title} onChangeText={setTitle} placeholder="Design name"/><Field label="Starting price (€)" value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="45"/><Button label={busy?'Saving changes…':'Save design changes'} onPress={save} disabled={busy}/></View></>;
+  return <><View style={styles.editScreenHead}><View><Text style={styles.profileKicker}>EDIT DESIGN</Text><Text style={styles.title}>Polish your look.</Text></View><View style={styles.editIconBadge}><Text style={styles.editIconBadgeText}>✎</Text></View></View><Pressable style={styles.editImageWrap} onPress={chooseReplacementImage}><Image source={{uri:image?.uri || look.image_url}} style={styles.editImage}/><View style={styles.changeImagePill}><Text style={styles.changeImageText}>✎ Change photo</Text></View></Pressable><View style={styles.formCard}><Field label="Design name" value={title} onChangeText={setTitle} placeholder="Design name"/><Field label="Starting price (€)" value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="45"/><Button label={busy?'Saving changes…':'Save design changes'} onPress={save} disabled={busy}/></View></>;
 }
 
 function LegalScreen({ pageKey, onOpen, onDelete, notify }: { pageKey: LegalPageKey | 'account'; onOpen: (key: LegalPageKey | 'account') => void; onDelete: () => Promise<void>; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
@@ -1011,7 +1034,7 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onO
   const [name, setName] = useState(studio?.name || ''), [city, setCity] = useState(studio?.city || ''), [address, setAddress] = useState(studio?.address || ''), [bio, setBio] = useState(studio?.bio || ''), [phone, setPhone] = useState(studio?.phone || '');
   const [editingStudio, setEditingStudio] = useState(!studio);
   const [title, setTitle] = useState(''), [price, setPrice] = useState(''), [image, setImage] = useState<ImagePickerAsset | null>(null);
-  const [attributes, setAttributes] = useState<NailAttributes | null>(null), [analyzing, setAnalyzing] = useState(false);
+  const [attributes, setAttributes] = useState<NailAttributes | null>(null), [analyzing, setAnalyzing] = useState(false), [imageValidated, setImageValidated] = useState(false);
   const [studioPhotos, setStudioPhotos] = useState<StudioPhoto[]>([]), [studioPhotoBusy, setStudioPhotoBusy] = useState(false);
   const [lookToDelete, setLookToDelete] = useState<Look | null>(null), [deletingLook, setDeletingLook] = useState(false);
   const attributeOptions = {
@@ -1026,10 +1049,21 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onO
       const asset = await pickPortfolioImage();
       setImage(asset);
       setAttributes(null);
-      if (!asset?.base64 || !matchingConfigured()) return;
+      setImageValidated(false);
+      if (!asset) return;
+      if (!asset.base64 || !matchingConfigured()) {
+        notify('Photo check unavailable','Nailly could not verify this image, so it cannot be published yet. Please try again when the AI service is available.','info');
+        return;
+      }
       setAnalyzing(true);
-      try { setAttributes(await analyzeNails(asset.base64)); }
-      catch (e) { notify('AI analysis unavailable', friendlyError(e), 'info'); }
+      try {
+        setAttributes(await analyzeNails(asset.base64));
+        setImageValidated(true);
+      }
+      catch (e) {
+        setImageValidated(false);
+        notify('Photo not approved',friendlyError(e),'error');
+      }
       finally { setAnalyzing(false); }
     } catch (e) { notify('Photo', friendlyError(e), 'error'); }
   }
@@ -1095,8 +1129,9 @@ function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onO
   }
   async function addLook() {
     if (!studio || !image || !title.trim() || !price.trim() || !Number.isFinite(Number(price)) || Number(price) < 0) return Alert.alert('Portfolio', 'Add a photo, title and valid price in euros.');
+    if (!imageValidated) return notify('Photo needs approval','Choose a clear manicure photo and wait for Nailly to finish the AI safety check before publishing.','info');
     setBusy(true);
-    try { const lookId = await uploadLook(studio.id, title.trim(), Number(price), image, attributes || undefined); if (matchingConfigured()) { try { await indexLook(lookId); } catch (indexError) { Alert.alert('Design published', `Visual indexing is pending: ${friendlyError(indexError)}`); } } setImage(null); setAttributes(null); setTitle(''); setPrice(''); await onRefresh(); notify('Design published', 'Your new nail design is now visible in Discover.', 'success'); } catch (e) { notify('Upload failed', friendlyError(e), 'error'); } finally { setBusy(false); }
+    try { const lookId = await uploadLook(studio.id, title.trim(), Number(price), image, attributes || undefined); if (matchingConfigured()) { try { await indexLook(lookId); } catch (indexError) { Alert.alert('Design published', `Visual indexing is pending: ${friendlyError(indexError)}`); } } setImage(null); setAttributes(null); setImageValidated(false); setTitle(''); setPrice(''); await onRefresh(); notify('Design published', 'Your new nail design is now visible in Discover.', 'success'); } catch (e) { notify('Upload failed', friendlyError(e), 'error'); } finally { setBusy(false); }
   }
   async function addSlot() {
     if (!studio || !selectedDate || !selectedTime) return notify('Choose date and time', 'Select both a date and a start time for this appointment.', 'info');
