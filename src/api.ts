@@ -133,7 +133,12 @@ export async function deleteMyAccount() {
   if (!data?.success) throw new Error(data?.error || 'Account deletion failed.');
   await supabase.auth.signOut();
 }
-export function friendlyError(error: unknown) { return error instanceof Error ? error.message : String(error); }
+export function friendlyError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (/invalid login credentials|invalid credentials/i.test(raw)) return 'The email or password you entered is incorrect.';
+  if (/email not confirmed/i.test(raw)) return 'Please confirm your email address before signing in.';
+  return raw;
+}
 
 
 export async function listStudioPhotos(studioId: string): Promise<StudioPhoto[]> {
