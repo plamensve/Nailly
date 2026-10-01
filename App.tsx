@@ -116,7 +116,7 @@ export default function App() {
   const [toast, setToast] = useState<{title:string;detail:string;type?:'success'|'error'|'info'} | null>(null);
   const [tab, setTab] = useState<Tab>('Discover');
   const [profileSection, setProfileSection] = useState<'saved' | 'appointments' | 'designs' | null>(null);
-  const [screen, setScreen] = useState<'home' | 'results' | 'look' | 'auth' | 'studio' | 'appointment' | 'edit-look' | 'legal' | 'reviews' | 'feedback' | 'admin-feedback' | 'admin-moderation' | 'contact'>('home');
+  const [screen, setScreen] = useState<'home' | 'results' | 'look' | 'auth' | 'studio' | 'appointment' | 'edit-look' | 'legal' | 'reviews' | 'feedback' | 'admin-feedback' | 'admin-moderation' | 'contact' | 'reset-password'>('home');
   const [looks, setLooks] = useState<Look[]>([]);
   const [studioRatings, setStudioRatings] = useState<Record<string,{avg_rating:number|null;rating_count:number}>>({});
   const [saved, setSaved] = useState<string[]>([]);
@@ -205,6 +205,7 @@ export default function App() {
         const code = getParam('code');
         const accessToken = getParam('access_token');
         const refreshToken = getParam('refresh_token');
+        const type = getParam('type');
 
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -219,9 +220,15 @@ export default function App() {
           return;
         }
 
-        setScreen('home');
-        setTab('Profile');
-        setToast({ title: 'Email confirmed', detail: 'Your Nailly account is ready.', type: 'success' });
+        if(type==='recovery'){
+          setScreen('reset-password');
+          setTab('Profile');
+          setToast({ title: 'Secure reset link opened', detail: 'Choose your new Nailly password.', type: 'info' });
+        }else{
+          setScreen('home');
+          setTab('Profile');
+          setToast({ title: 'Email confirmed', detail: 'Your Nailly account is ready.', type: 'success' });
+        }
       } catch (e) {
         message('Email confirmation', e);
       }
@@ -478,7 +485,8 @@ export default function App() {
 
   return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>{screen !== 'home' && <View style={styles.fixedBackWrap}><Pressable onPress={goBack} style={styles.backButton}><View style={styles.backButtonIcon}><Text style={styles.backButtonArrow}>‹</Text></View><Text style={styles.backButtonText}>Back</Text><Text style={styles.backButtonSpark}>✦</Text></Pressable></View>}<ScrollView ref={mainScrollRef} onScroll={e=>{if(screen==='home'&&tab==='Discover') discoverScrollY.current=e.nativeEvent.contentOffset.y;}} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.content}>
     <Animated.View style={{opacity:pageOpacity,transform:[{translateY:pageTranslateY}]}}>
-    {screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} notify={(title,detail,type) => setToast({title,detail,type})} />
+    {screen === 'reset-password' ? <ResetPasswordScreen onDone={() => { setTab('Profile'); setScreen('home'); }} notify={(title,detail,type) => setToast({title,detail,type})} />
+    : screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'studio' ? <StudioScreen session={session} studio={studio} looks={looks} bookings={bookings} onRefresh={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} onOpenBooking={openAppointment} onOpenReviews={openStudioReviews} onOpenLook={(look) => { setSelected(look); setScreen('look'); }} onStudioCreated={async () => { await refresh(session?.user.id); setToast({title:'Studio created',detail:'Your studio is live. Add your first design or available appointment.',type:'success'}); }} />
     : screen === 'appointment' && selectedBooking ? <AppointmentScreen booking={selectedBooking} session={session} onStatus={async (id,status) => { await changeBooking(id,status); await refresh(session?.user.id); const refreshed = bookings.find(b => b.id === id); if (refreshed) setSelectedBooking({...refreshed,status}); }} onRatingSaved={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'edit-look' && selected ? <EditLookScreen look={selected} onSaved={async updated => { setSelected(updated); await refresh(session?.user.id); setScreen('look'); setToast({title:'Design updated',detail:'Your changes are live in Nailly.',type:'success'}); }} notify={(title,detail,type) => setToast({title,detail,type})} />
@@ -1085,10 +1093,52 @@ function LegalScreen({ pageKey, onOpen, onDelete, notify }: { pageKey: LegalPage
   return <><Text style={styles.profileKicker}>LEGAL & PRIVACY</Text><Text style={styles.title}>{page.title}</Text><Text style={styles.legalSubtitle}>{page.subtitle}</Text><Text style={styles.legalDate}>Effective 29 September 2026</Text>{page.sections.map(section=><View key={section.heading} style={styles.legalSection}><Text style={styles.legalHeading}>{section.heading}</Text><Text style={styles.legalBody}>{section.body}</Text></View>)}<View style={styles.legalQuickLinks}><Text style={styles.sectionSmall}>More</Text>{(['privacy','terms','gdpr','community'] as LegalPageKey[]).filter(k=>k!==pageKey).map(k=><Pressable key={k} style={styles.settingsRow} onPress={()=>onOpen(k)}><Text style={styles.settingsTitle}>{legalPages[k].title}</Text><Text style={styles.rowChevron}>›</Text></Pressable>)}</View></>;
 }
 
+function ResetPasswordScreen({ onDone, notify }: { onDone: () => void; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
+  const [password,setPassword]=useState('');
+  const [confirmPassword,setConfirmPassword]=useState('');
+  const [busy,setBusy]=useState(false);
+
+  async function savePassword(){
+    if(password.length<8) return notify('Choose a stronger password','Use at least 8 characters for your new password.','info');
+    if(password!==confirmPassword) return notify('Passwords do not match','Enter the same password in both fields.','info');
+    setBusy(true);
+    try{
+      const {error}=await supabase.auth.updateUser({password});
+      if(error) throw error;
+      setPassword('');
+      setConfirmPassword('');
+      notify('Password updated','Your Nailly password has been changed successfully.','success');
+      onDone();
+    }catch(e){
+      notify('Could not update password',friendlyError(e),'error');
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  return <>
+    <View style={styles.resetHero}>
+      <View style={styles.resetHeroGlow}/>
+      <Text style={styles.resetBrand}>nailly<Text style={{color:colors.coral}}>.</Text></Text>
+      <Text style={styles.resetKicker}>SECURE YOUR ACCOUNT</Text>
+      <Text style={styles.resetTitle}>Create a new password.</Text>
+      <Text style={styles.resetBody}>Choose a new password for your Nailly account. After saving it, you can continue using the app normally.</Text>
+    </View>
+    <View style={styles.resetCard}>
+      <Field label="New password" value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 8 characters" />
+      <Field label="Confirm new password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry placeholder="Repeat your password" />
+      <View style={styles.resetHint}><Text style={styles.resetHintIcon}>✦</Text><Text style={styles.resetHintText}>For better security, use a unique password you do not use on other services.</Text></View>
+      <Button label={busy?'Updating password…':'Save new password'} onPress={savePassword} disabled={busy}/>
+    </View>
+  </>;
+}
+
 function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
   const [register, setRegister] = useState(false), [artist, setArtist] = useState(false), [busy, setBusy] = useState(false);
   const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [name, setName] = useState('');
   const [showEmailConfirm, setShowEmailConfirm] = useState(false);
+  const [showResetSent, setShowResetSent] = useState(false);
+
   async function submit() {
     if (!email.trim() || password.length < 6 || (register && !name.trim())) { notify('Check your details', 'Enter a name, email and a password of at least 6 characters.', 'info'); return; }
     setBusy(true);
@@ -1113,6 +1163,21 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
       setBusy(false);
     }
   }
+
+  async function forgotPassword(){
+    if(!email.trim()) return notify('Enter your email','Type the email address you use for Nailly first.','info');
+    setBusy(true);
+    try{
+      const {error}=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:'https://naillyapp.com/auth/callback/?type=recovery'});
+      if(error) throw error;
+      setShowResetSent(true);
+    }catch(e){
+      notify('Could not send reset email',friendlyError(e),'error');
+    }finally{
+      setBusy(false);
+    }
+  }
+
   return <>
     <Text style={styles.eyebrow}>WELCOME TO NAILLY</Text>
     <Text style={styles.title}>{register ? 'Join Nailly' : 'Welcome back'}</Text>
@@ -1120,8 +1185,10 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
     {register && <><Field label="Your name" value={name} onChangeText={setName} placeholder="Your name" /><Text style={styles.fieldLabel}>Account type</Text><View style={styles.choiceRow}><Pressable onPress={() => setArtist(false)} style={[styles.choice, !artist && styles.choiceActive]}><Text style={styles.choiceText}>Client</Text></Pressable><Pressable onPress={() => setArtist(true)} style={[styles.choice, artist && styles.choiceActive]}><Text style={styles.choiceText}>Nail artist / studio</Text></Pressable></View></>}
     <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="you@example.com" />
     <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 6 characters" />
+    {!register&&<Pressable disabled={busy} onPress={()=>void forgotPassword()} style={styles.forgotPasswordLink}><Text style={styles.forgotPasswordText}>Forgot your password?</Text><Text style={styles.forgotPasswordArrow}>→</Text></Pressable>}
     <Button label={busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} />
     <Button label={register ? 'I already have an account' : 'Create a new account'} secondary onPress={() => setRegister(!register)} />
+
     <Modal transparent visible={showEmailConfirm} animationType="fade" onRequestClose={()=>setShowEmailConfirm(false)}>
       <View style={styles.naillyModalBackdrop}>
         <View style={styles.naillyDeleteModal}>
@@ -1132,6 +1199,18 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
             <Pressable style={styles.naillyModalKeep} onPress={()=>setShowEmailConfirm(false)}><Text style={styles.naillyModalKeepText}>Stay here</Text></Pressable>
             <Pressable style={styles.naillyModalRemove} onPress={()=>{setShowEmailConfirm(false);setRegister(false);}}><Text style={styles.naillyModalRemoveText}>Go to sign in</Text></Pressable>
           </View>
+        </View>
+      </View>
+    </Modal>
+
+    <Modal transparent visible={showResetSent} animationType="fade" onRequestClose={()=>setShowResetSent(false)}>
+      <View style={styles.naillyModalBackdrop}>
+        <View style={styles.naillyDeleteModal}>
+          <Text style={styles.modalBrand}>nailly<Text style={{color:colors.coral}}>.</Text></Text>
+          <View style={styles.resetMailIcon}><Text style={styles.resetMailIconText}>✉</Text></View>
+          <Text style={styles.naillyModalTitle}>Reset link sent</Text>
+          <Text style={styles.naillyModalBody}>If an account exists for {email.trim()}, you’ll receive a secure password reset link. Open it on this device to continue in Nailly.</Text>
+          <Pressable style={styles.resetModalDone} onPress={()=>setShowResetSent(false)}><Text style={styles.resetModalDoneText}>Got it</Text></Pressable>
         </View>
       </View>
     </Modal>
@@ -1463,7 +1542,24 @@ const styles = StyleSheet.create({
   lookSwipeCoach: { position: 'absolute', alignSelf: 'center', bottom: 34, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,.96)', borderWidth: 1, borderColor: '#f1dce4', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, shadowColor: colors.ink, shadowOpacity: .12, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 5 },
   lookSwipeCoachArrow: { color: '#d66b9b', fontSize: 26, lineHeight: 28, marginRight: 9, fontWeight: '800' },
   lookSwipeCoachTitle: { color: colors.ink, fontSize: 12, lineHeight: 15, fontWeight: '900' },
-  lookSwipeCoachText: { color: colors.muted, fontSize: 9, lineHeight: 12, marginTop: 1 }, pill: { backgroundColor: colors.blush, borderRadius: 17, padding: 15, marginBottom: 20 }, pillText: { color: colors.ink }, slot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'white', borderWidth: 1, borderColor: colors.edge, borderRadius: 13, padding: 15, marginBottom: 8 }, slotText: { color: colors.ink, fontSize: 14, marginVertical: 4 }, link: { color: colors.coral, fontWeight: '700' }, uploaded: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.blush, padding: 10, borderRadius: 18, marginBottom: 20 }, thumb: { width: 70, height: 70, borderRadius: 13, marginRight: 15 }, empty: { alignItems: 'center', backgroundColor: 'white', borderWidth: 1, borderColor: colors.edge, borderRadius: 24, paddingHorizontal: 26, paddingVertical: 30, marginTop: 20 }, emptyBrand: { fontSize: 31, fontWeight: '800', color: colors.ink, letterSpacing: -1.5, marginBottom: 18 }, emptyIcon: { color: colors.coral, fontSize: 45 }, emptyArt: { width: 78, height: 78, borderRadius: 39, backgroundColor: colors.blush, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }, emptyArtInner: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderWidth: 1, borderColor: '#f4d8d3' }, emptyArtN: { color: colors.ink, fontSize: 28, fontWeight: '900', letterSpacing: -2 }, emptyArtDot: { color: colors.coral, fontSize: 30, fontWeight: '900', marginLeft: -1, marginTop: 7 }, emptyTitle: { color: colors.ink, fontFamily: 'Georgia', fontSize: 21, lineHeight: 27, textAlign: 'center', marginBottom: 8 }, emptyDetail: { color: colors.muted, fontSize: 13, lineHeight: 19, textAlign: 'center', maxWidth: 280 }, panel: { backgroundColor: 'white', borderColor: colors.edge, borderWidth: 1, borderRadius: 17, padding: 16, marginVertical: 8 }, notice: { backgroundColor: colors.blush, padding: 15, borderRadius: 15, marginTop: 20 }, noticeText: { color: colors.ink }, field: { marginBottom: 15 }, fieldLabel: { color: colors.ink, fontWeight: '700', marginBottom: 7 }, input: { borderWidth: 1, borderColor: colors.edge, backgroundColor: 'white', borderRadius: 12, padding: 13, fontSize: 15, color: colors.ink }, choiceRow: { flexDirection: 'row', marginBottom: 20 }, choice: { padding: 12, backgroundColor: 'white', borderRadius: 12, marginRight: 8, borderWidth: 1, borderColor: colors.edge }, choiceActive: { backgroundColor: colors.blush, borderColor: colors.coral }, choiceText: { color: colors.ink },
+  lookSwipeCoachText: { color: colors.muted, fontSize: 9, lineHeight: 12, marginTop: 1 }, pill: { backgroundColor: colors.blush, borderRadius: 17, padding: 15, marginBottom: 20 }, pillText: { color: colors.ink }, slot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'white', borderWidth: 1, borderColor: colors.edge, borderRadius: 13, padding: 15, marginBottom: 8 }, slotText: { color: colors.ink, fontSize: 14, marginVertical: 4 }, link: { color: colors.coral, fontWeight: '700' }, uploaded: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.blush, padding: 10, borderRadius: 18, marginBottom: 20 }, thumb: { width: 70, height: 70, borderRadius: 13, marginRight: 15 }, empty: { alignItems: 'center', backgroundColor: 'white', borderWidth: 1, borderColor: colors.edge, borderRadius: 24, paddingHorizontal: 26, paddingVertical: 30, marginTop: 20 }, emptyBrand: { fontSize: 31, fontWeight: '800', color: colors.ink, letterSpacing: -1.5, marginBottom: 18 }, emptyIcon: { color: colors.coral, fontSize: 45 }, emptyArt: { width: 78, height: 78, borderRadius: 39, backgroundColor: colors.blush, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }, emptyArtInner: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderWidth: 1, borderColor: '#f4d8d3' }, emptyArtN: { color: colors.ink, fontSize: 28, fontWeight: '900', letterSpacing: -2 }, emptyArtDot: { color: colors.coral, fontSize: 30, fontWeight: '900', marginLeft: -1, marginTop: 7 }, emptyTitle: { color: colors.ink, fontFamily: 'Georgia', fontSize: 21, lineHeight: 27, textAlign: 'center', marginBottom: 8 }, emptyDetail: { color: colors.muted, fontSize: 13, lineHeight: 19, textAlign: 'center', maxWidth: 280 }, panel: { backgroundColor: 'white', borderColor: colors.edge, borderWidth: 1, borderRadius: 17, padding: 16, marginVertical: 8 }, notice: { backgroundColor: colors.blush, padding: 15, borderRadius: 15, marginTop: 20 }, noticeText: { color: colors.ink }, field: { marginBottom: 15 }, fieldLabel: { color: colors.ink, fontWeight: '700', marginBottom: 7 }, input: { borderWidth: 1, borderColor: colors.edge, backgroundColor: 'white', borderRadius: 12, padding: 13, fontSize: 15, color: colors.ink }, forgotPasswordLink: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', marginTop: -4, marginBottom: 8, paddingVertical: 5, paddingLeft: 8 },
+  forgotPasswordText: { color: '#a96282', fontSize: 10, fontWeight: '900' },
+  forgotPasswordArrow: { color: '#a96282', fontSize: 14, marginLeft: 5 },
+  resetMailIcon: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#fff0f5', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginTop: 6, marginBottom: 10 },
+  resetMailIconText: { color: '#bd6c91', fontSize: 22, fontWeight: '900' },
+  resetModalDone: { width: '100%', minHeight: 46, borderRadius: 15, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  resetModalDoneText: { color: 'white', fontSize: 11, fontWeight: '900' },
+  resetHero: { position: 'relative', overflow: 'hidden', backgroundColor: '#fff5f8', borderRadius: 28, borderWidth: 1, borderColor: '#efdae4', padding: 22, marginBottom: 16 },
+  resetHeroGlow: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: '#f6e0e9', right: -48, top: -52, opacity: .8 },
+  resetBrand: { color: colors.ink, fontFamily: 'Georgia', fontSize: 23, fontWeight: '700', marginBottom: 12 },
+  resetKicker: { color: '#a56a86', fontSize: 8, fontWeight: '900', letterSpacing: 1.2 },
+  resetTitle: { color: colors.ink, fontFamily: 'Georgia', fontSize: 29, lineHeight: 35, marginTop: 4, maxWidth: 280 },
+  resetBody: { color: colors.muted, fontSize: 10, lineHeight: 16, marginTop: 8, maxWidth: 295 },
+  resetCard: { backgroundColor: 'white', borderRadius: 24, borderWidth: 1, borderColor: colors.edge, padding: 17 },
+  resetHint: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff8fb', borderRadius: 16, borderWidth: 1, borderColor: '#efdee5', padding: 11, marginTop: 2, marginBottom: 8 },
+  resetHintIcon: { color: '#c47e9d', fontSize: 13, marginRight: 8 },
+  resetHintText: { flex: 1, color: colors.muted, fontSize: 9, lineHeight: 14 },
+  choiceRow: { flexDirection: 'row', marginBottom: 20 }, choice: { padding: 12, backgroundColor: 'white', borderRadius: 12, marginRight: 8, borderWidth: 1, borderColor: colors.edge }, choiceActive: { backgroundColor: colors.blush, borderColor: colors.coral }, choiceText: { color: colors.ink },
 
   studioPreviewMain: { flexDirection: 'row', alignItems: 'center' },
   studioPreviewContent: { flex: 1, paddingRight: 14 },
