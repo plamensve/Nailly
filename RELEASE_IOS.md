@@ -4,10 +4,12 @@ Nailly is configured for the first public release as version **1.0.0** with iOS 
 
 ## Required visual assets before the first EAS build
 
-Add these files before enabling the corresponding `app.json` entries:
+The final Nailly visual direction is approved. The repository still needs the binary PNG files to exist before their `app.json` references are enabled:
 
 - `assets/icon.png` — 1024×1024 PNG app icon.
-- `assets/splash-icon.png` — transparent PNG containing the official Nailly mark/wordmark.
+- `assets/splash-icon.png` — transparent PNG containing the official Nailly wordmark.
+
+The mobile source uses the official wordmark style everywhere: dark burgundy serif `nailly` with a coral dot.
 
 After the assets exist, configure:
 
