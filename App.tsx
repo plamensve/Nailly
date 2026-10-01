@@ -218,11 +218,19 @@ export default function App() {
         const code = getParam('code');
         const accessToken = getParam('access_token');
         const refreshToken = getParam('refresh_token');
+        const tokenHash = getParam('token_hash');
         const type = getParam('type');
-        const isNativeRecoveryCallback = parsed.protocol === 'nailly:' && parsed.hostname === 'auth' && parsed.pathname === '/callback';
-        const isRecovery = type === 'recovery' || parsed.searchParams.get('type') === 'recovery' || hashParams.get('type') === 'recovery' || isNativeRecoveryCallback;
+        const isRecovery = type === 'recovery' || parsed.searchParams.get('type') === 'recovery' || hashParams.get('type') === 'recovery';
 
-        if (code) {
+        if (tokenHash && isRecovery) {
+          const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: 'recovery',
+          });
+          if (verifyError) throw verifyError;
+          if (!verifyData.session) throw new Error('Recovery session could not be created.');
+          setSession(verifyData.session);
+        } else if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
         } else if (accessToken && refreshToken) {
