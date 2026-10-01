@@ -1191,7 +1191,7 @@ function SettingsScreen({
     </View>
 
     <Pressable style={styles.settingsSignOut} onPress={()=>void signOut()}><Text style={styles.settingsSignOutText}>Sign out</Text><Text style={styles.settingsSignOutArrow}>→</Text></Pressable>
-    <Text style={styles.settingsVersion}>Nailly · Version 0.1.0</Text>
+    <Text style={styles.settingsVersion}>Nailly · Version 1.0.0</Text>
   </>;
 }
 
