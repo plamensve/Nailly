@@ -32,22 +32,12 @@
           "photosPermission": "Choose a manicure photo to explore nail designs.",
           "cameraPermission": "Take a photo of a manicure for inspiration."
         }
-      ],
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/splash-icon.png",
-          "imageWidth": 220,
-          "resizeMode": "contain",
-          "backgroundColor": "#fffaf7"
-        }
       ]
     ],
     "extra": {
       "supportUrl": "https://naillyapp.com/support.html",
       "privacyUrl": "https://naillyapp.com/privacy.html",
       "accountDeletionUrl": "https://naillyapp.com/delete-account.html"
-    },
-    "icon": "./assets/icon.png"
+    }
   }
 }
