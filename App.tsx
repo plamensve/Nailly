@@ -1415,7 +1415,7 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
     if(!resetEmail.trim()) return notify('Enter your email','Type the email address you use for Nailly.','info');
     setBusy(true);
     try{
-      const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim(),{redirectTo:'nailly://auth/callback'});
+      const {error}=await supabase.auth.resetPasswordForEmail(resetEmail.trim(),{redirectTo:'nailly://auth/callback?type=recovery'});
       if(error) throw error;
       setResetSent(true);
     }catch(e){
