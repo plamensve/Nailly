@@ -158,6 +158,8 @@ export default function App() {
   const [reportModal, setReportModal] = useState<{targetType:'design'|'studio'|'review'|'profile';targetId:string;reportedUserId:string|null}|null>(null);
   const [blockModal, setBlockModal] = useState<{userId:string;displayName:string}|null>(null);
   const [safetyBusy, setSafetyBusy] = useState(false);
+  const handledAuthUrls = useRef<Set<string>>(new Set());
+  const authUrlInFlight = useRef(false);
 
   const refresh = useCallback(async (userId?: string) => {
     try {
@@ -198,18 +200,26 @@ export default function App() {
   }, []);
   useEffect(() => {
     const handleAuthUrl = async (url: string) => {
+      // iOS can deliver the same deep link through both getInitialURL() and the
+      // Linking event. Processing both starts two Supabase session requests and
+      // one can be cancelled by ExpoModulesCore. Handle every callback once.
+      if (handledAuthUrls.current.has(url) || authUrlInFlight.current) return;
+      handledAuthUrls.current.add(url);
+      authUrlInFlight.current = true;
+
       try {
         const parsed = new URL(url);
         const hashParams = new URLSearchParams(parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash);
         const getParam = (key: string) => parsed.searchParams.get(key) ?? hashParams.get(key);
 
         const authError = getParam('error_description') || getParam('error');
-        if (authError) throw new Error(authError);
+        if (authError) throw new Error(decodeURIComponent(authError.replace(/\+/g, ' ')));
 
         const code = getParam('code');
         const accessToken = getParam('access_token');
         const refreshToken = getParam('refresh_token');
         const type = getParam('type');
+        const isRecovery = type === 'recovery' || parsed.searchParams.get('type') === 'recovery' || hashParams.get('type') === 'recovery';
 
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -224,17 +234,22 @@ export default function App() {
           return;
         }
 
-        if(type==='recovery'){
+        if (isRecovery) {
           setScreen('reset-password');
           setTab('Profile');
           setToast({ title: 'Secure reset link opened', detail: 'Choose your new Nailly password.', type: 'info' });
-        }else{
+        } else {
           setScreen('home');
           setTab('Profile');
           setToast({ title: 'Email confirmed', detail: 'Your Nailly account is ready.', type: 'success' });
         }
       } catch (e) {
-        message('Email confirmation', e);
+        // A cancelled native fetch is normally caused by an interrupted or
+        // duplicated iOS callback. Do not replace the recovery UI with an alert.
+        const detail = friendlyError(e);
+        if (!/cancelled|canceled/i.test(detail)) message('Email confirmation', e);
+      } finally {
+        authUrlInFlight.current = false;
       }
     };
 
