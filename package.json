@@ -13,7 +13,8 @@
     "react-native": "0.86.3",
     "react-native-url-polyfill": "^4.0.0",
     "@react-native-community/datetimepicker": "9.1.0",
-    "expo-splash-screen": "~57.0.9"
+    "expo-splash-screen": "~57.0.9",
+    "expo-updates": "~57.0.10"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
@@ -32,7 +33,9 @@
     "submit:ios": "eas submit --platform ios --profile production",
     "build:android:preview": "eas build --platform android --profile preview",
     "build:android:production": "eas build --platform android --profile production",
-    "submit:android": "eas submit --platform android --profile production"
+    "submit:android": "eas submit --platform android --profile production",
+    "update:preview": "eas update --channel preview --environment preview",
+    "update:production": "eas update --channel production --environment production"
   },
   "private": true
 }
