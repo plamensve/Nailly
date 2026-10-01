@@ -1,0 +1,51 @@
+name: Normalize Nailly app icon
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/normalize-icon.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Convert app icon to production-safe RGB PNG
+        run: |
+          python -m pip install --quiet pillow
+          python - <<'PY'
+          from PIL import Image
+          path = "assets/icon.png"
+          image = Image.open(path)
+          if image.size != (1024, 1024):
+              image = image.resize((1024, 1024), Image.Resampling.LANCZOS)
+          if image.mode == "RGBA":
+              background = Image.new("RGB", image.size, (255, 250, 247))
+              background.paste(image, mask=image.getchannel("A"))
+              image = background
+          else:
+              image = image.convert("RGB")
+          image.save(path, "PNG", optimize=True)
+          print("Saved", path, image.mode, image.size)
+          PY
+      - name: Commit normalized icon
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/icon.png
+          if git diff --cached --quiet; then
+            echo "Icon already production-safe."
+            exit 0
+          fi
+          git commit -m "Normalize Nailly production app icon"
+          git push
