@@ -121,7 +121,7 @@ export default function App() {
 
         setScreen('home');
         setTab('Profile');
-        Alert.alert('Email confirmed', 'Your Nailly account is ready.');
+        setToast({ title: 'Email confirmed', detail: 'Your Nailly account is ready.', type: 'success' });
       } catch (e) {
         message('Email confirmation', e);
       }
@@ -248,7 +248,7 @@ export default function App() {
 
   return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}><ScrollView ref={mainScrollRef} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.content}>
     {screen !== 'home' && <Pressable onPress={goBack}><Text style={styles.back}>‹ Back</Text></Pressable>}
-    {screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} />
+    {screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'studio' ? <StudioScreen session={session} studio={studio} looks={looks} bookings={bookings} onRefresh={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} onOpenBooking={openAppointment} onOpenReviews={openStudioReviews} onOpenLook={(look) => { setSelected(look); setScreen('look'); }} onStudioCreated={async () => { await refresh(session?.user.id); setToast({title:'Studio created',detail:'Your studio is live. Add your first design or available appointment.',type:'success'}); }} />
     : screen === 'appointment' && selectedBooking ? <AppointmentScreen booking={selectedBooking} session={session} onStatus={async (id,status) => { await changeBooking(id,status); await refresh(session?.user.id); const refreshed = bookings.find(b => b.id === id); if (refreshed) setSelectedBooking({...refreshed,status}); }} onRatingSaved={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'edit-look' && selected ? <EditLookScreen look={selected} onSaved={async updated => { setSelected(updated); await refresh(session?.user.id); setScreen('look'); setToast({title:'Design updated',detail:'Your changes are live in Nailly.',type:'success'}); }} notify={(title,detail,type) => setToast({title,detail,type})} />
@@ -416,7 +416,7 @@ function LegalScreen({ pageKey, onOpen, onDelete, notify }: { pageKey: LegalPage
   return <><Text style={styles.profileKicker}>LEGAL & PRIVACY</Text><Text style={styles.title}>{page.title}</Text><Text style={styles.legalSubtitle}>{page.subtitle}</Text><Text style={styles.legalDate}>Effective 29 September 2026</Text>{page.sections.map(section=><View key={section.heading} style={styles.legalSection}><Text style={styles.legalHeading}>{section.heading}</Text><Text style={styles.legalBody}>{section.body}</Text></View>)}<View style={styles.legalQuickLinks}><Text style={styles.sectionSmall}>More</Text>{(['privacy','terms','gdpr','community'] as LegalPageKey[]).filter(k=>k!==pageKey).map(k=><Pressable key={k} style={styles.settingsRow} onPress={()=>onOpen(k)}><Text style={styles.settingsTitle}>{legalPages[k].title}</Text><Text style={styles.rowChevron}>›</Text></Pressable>)}</View></>;
 }
 
-function AuthScreen({ onDone }: { onDone: () => void }) {
+function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
   const [register, setRegister] = useState(false), [artist, setArtist] = useState(false), [busy, setBusy] = useState(false);
   const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [name, setName] = useState('');
   async function submit() {
@@ -426,7 +426,7 @@ function AuthScreen({ onDone }: { onDone: () => void }) {
       if (register) {
         const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: 'https://naillyapp.com/auth/callback/', data: { display_name: name.trim(), role: artist ? 'artist' : 'client' } } });
         if (error) throw error;
-        if (!data.session) Alert.alert('Check your email', 'Confirm your email address, then sign in.'); else onDone();
+        if (!data.session) notify('Check your email', 'We sent you a confirmation link. Open your email and confirm your address, then sign in to Nailly.', 'info'); else onDone();
       } else { const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }); if (error) throw error; onDone(); }
     } catch (e) { message('Account', e); } finally { setBusy(false); }
   }
