@@ -1198,7 +1198,7 @@ function SettingsScreen({
 
     <Text style={styles.settingsSectionLabel}>PRIVACY & DATA</Text>
     <View style={styles.settingsGroup}>
-      <Pressable style={styles.settingsItem} onPress={()=>onLegal('privacy')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>◈</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy Policy</Text><Text style={styles.settingsItemText}>How Nailly handles your personal data.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
+      <Pressable style={styles.settingsItem} onPress={()=>onLegal('privacy')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✓</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy Policy</Text><Text style={styles.settingsItemText}>How Nailly handles your personal data.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('gdpr')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✓</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy & GDPR rights</Text><Text style={styles.settingsItemText}>Access, correction and deletion rights.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('terms')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>§</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Terms of Service</Text><Text style={styles.settingsItemText}>Rules for using Nailly as a client or artist.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('community')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✦</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Community Guidelines</Text><Text style={styles.settingsItemText}>Standards for content, reviews and behaviour.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
@@ -1387,7 +1387,13 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
         onDone();
       }
     } catch (e) {
-      notify('Account', friendlyError(e), 'error');
+      const detail = friendlyError(e);
+      const invalidCredentials = /invalid login credentials|invalid credentials|email or password|wrong password/i.test(detail);
+      notify(
+        invalidCredentials ? 'Incorrect email or password' : 'Could not sign in',
+        invalidCredentials ? 'The email or password you entered is incorrect. Please try again.' : detail,
+        'error'
+      );
     } finally {
       setBusy(false);
     }
