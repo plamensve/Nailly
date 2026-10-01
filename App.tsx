@@ -1198,7 +1198,7 @@ function SettingsScreen({
 
     <Text style={styles.settingsSectionLabel}>PRIVACY & DATA</Text>
     <View style={styles.settingsGroup}>
-      <Pressable style={styles.settingsItem} onPress={()=>onLegal('privacy')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>◌</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy Policy</Text><Text style={styles.settingsItemText}>How Nailly handles your personal data.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
+      <Pressable style={styles.settingsItem} onPress={()=>onLegal('privacy')}><View style={styles.settingsItemIcon}><View style={styles.privacyShieldIcon}><View style={styles.privacyShieldLock}><View style={styles.privacyShieldShackle}/><View style={styles.privacyShieldLockBody}/></View></View></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy Policy</Text><Text style={styles.settingsItemText}>How Nailly handles your personal data.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('gdpr')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✓</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy & GDPR rights</Text><Text style={styles.settingsItemText}>Access, correction and deletion rights.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('terms')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>§</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Terms of Service</Text><Text style={styles.settingsItemText}>Rules for using Nailly as a client or artist.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('community')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✦</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Community Guidelines</Text><Text style={styles.settingsItemText}>Standards for content, reviews and behaviour.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
@@ -1963,6 +1963,10 @@ const styles = StyleSheet.create({
   settingsGroup: { backgroundColor: 'white', borderRadius: 20, borderWidth: 1, borderColor: colors.edge, overflow: 'hidden', marginBottom: 16 },
   settingsItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f4eaee' },
   settingsItemIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: '#fff3f7', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  privacyShieldIcon: { width: 22, height: 24, borderWidth: 2, borderColor: '#9c5f7c', borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  privacyShieldLock: { width: 10, height: 11, alignItems: 'center', justifyContent: 'flex-end' },
+  privacyShieldShackle: { position: 'absolute', top: 0, width: 7, height: 7, borderWidth: 1.5, borderColor: '#9c5f7c', borderBottomWidth: 0, borderTopLeftRadius: 5, borderTopRightRadius: 5 },
+  privacyShieldLockBody: { width: 9, height: 7, borderRadius: 2, backgroundColor: '#9c5f7c' },
   settingsItemIconText: { color: '#a96483', fontSize: 16, fontWeight: '900' },
   settingsItemTitle: { color: colors.ink, fontSize: 11, fontWeight: '900' },
   settingsItemText: { color: colors.muted, fontSize: 9, lineHeight: 13, marginTop: 2, paddingRight: 8 },
