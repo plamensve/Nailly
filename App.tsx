@@ -376,7 +376,7 @@ export default function App() {
   function blockUser(userId:string,displayName:string){
     if(!session){setScreen('auth');return;}
     if(userId===session.user.id)return;
-    Alert.alert('Block this account?',`You will no longer see designs from ${displayName}. You can unblock them later from your account data.`,[
+    Alert.alert('Block this account?',`You will no longer see designs from ${displayName} in Nailly.`,[
       {text:'Cancel',style:'cancel'},
       {text:'Block',style:'destructive',onPress:async()=>{
         const {error:blockError}=await supabase.from('blocked_users').upsert({blocker_id:session.user.id,blocked_id:userId},{onConflict:'blocker_id,blocked_id'});
