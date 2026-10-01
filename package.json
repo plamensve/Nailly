@@ -1,6 +1,6 @@
 {
   "name": "nailly",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -24,7 +24,11 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test:matching": "node --experimental-strip-types tests/similarity.test.mjs"
+    "test:matching": "node --experimental-strip-types tests/similarity.test.mjs",
+    "check": "npm run typecheck && npm run test:matching",
+    "build:ios:preview": "eas build --platform ios --profile preview",
+    "build:ios:production": "eas build --platform ios --profile production",
+    "submit:ios": "eas submit --platform ios --profile production"
   },
   "private": true
 }
