@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -137,12 +137,8 @@ export default function App() {
   const mainScrollRef = useRef<ScrollView>(null);
   const discoverScrollY = useRef(0);
   const restoreDiscoverScroll = useRef(false);
-  const swipeStart = useRef<{x:number;y:number}|null>(null);
   const pageOpacity = useRef(new Animated.Value(1)).current;
   const pageTranslateY = useRef(new Animated.Value(0)).current;
-  const lookTranslateX = useRef(new Animated.Value(0)).current;
-  const lookTransitioning = useRef(false);
-  const swipeActive = useRef(false);
   const detailLastTap = useRef(0);
   const detailHeartPulse = useRef(new Animated.Value(0)).current;
   const inspiration = useRef<string | null>(null);
@@ -153,8 +149,6 @@ export default function App() {
   const [bootProgress, setBootProgress] = useState(8);
   const [bootMessage, setBootMessage] = useState('Preparing Nailly…');
   const [showSwipeHint, setShowSwipeHint] = useState(false);
-  const [detailSwipeActive, setDetailSwipeActive] = useState(false);
-  const [detailPreviewDirection, setDetailPreviewDirection] = useState<-1 | 1>(1);
 
   const refresh = useCallback(async (userId?: string) => {
     try {
@@ -277,13 +271,6 @@ export default function App() {
   }, [session?.user.id, refresh]);
   useEffect(() => { if (selected) listSlots(selected.studio_id).then(setSlots).catch(e => setError(friendlyError(e))); }, [selected]);
   useEffect(() => {
-    setShowSwipeHint(false);
-    if (screen !== 'look' || looks.length <= 1) return;
-    const showTimer = setTimeout(() => setShowSwipeHint(true), 2500);
-    const hideTimer = setTimeout(() => setShowSwipeHint(false), 6000);
-    return () => { clearTimeout(showTimer); clearTimeout(hideTimer); };
-  }, [screen, looks.length]);
-  useEffect(() => {
     requestAnimationFrame(() => {
       if (screen === 'home' && tab === 'Discover' && restoreDiscoverScroll.current) {
         mainScrollRef.current?.scrollTo({ y: discoverScrollY.current, animated: false });
@@ -390,60 +377,13 @@ export default function App() {
     setScreen('look');
   }
   const detailLooks = tab === 'Discover' ? filteredLooks : tab === 'Saved' ? profileSavedLooks : looks;
-  const detailScreenWidth = Dimensions.get('window').width;
-  const selectedDetailIndex = selected ? detailLooks.findIndex(look => look.id === selected.id) : -1;
-  const previewLook = selectedDetailIndex >= 0 && detailLooks.length > 1
-    ? detailLooks[(selectedDetailIndex + detailPreviewDirection + detailLooks.length) % detailLooks.length]
-    : null;
-  function completeLookSwipe(direction: -1 | 1) {
-    if (!selected || !detailLooks.length || lookTransitioning.current) return;
+  function moveLook(direction: -1 | 1) {
+    if (!selected || detailLooks.length < 2) return;
     const currentIndex = detailLooks.findIndex(look => look.id === selected.id);
     if (currentIndex < 0) return;
     const nextIndex = (currentIndex + direction + detailLooks.length) % detailLooks.length;
-    lookTransitioning.current = true;
-    const screenWidth = Dimensions.get('window').width;
-    Animated.timing(lookTranslateX, {
-      toValue: direction > 0 ? -screenWidth * 1.18 : screenWidth * 1.18,
-      duration: 190,
-      useNativeDriver: true,
-    }).start(() => {
-      setSelected(detailLooks[nextIndex]);
-      lookTranslateX.setValue(0);
-      lookTransitioning.current = false;
-    });
-  }
-  function handleLookSwipeMove(pageX: number, pageY: number) {
-    if (!swipeStart.current || lookTransitioning.current) return;
-    const dx = pageX - swipeStart.current.x;
-    const dy = pageY - swipeStart.current.y;
-    if (!swipeActive.current) {
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      if (Math.abs(dy) > Math.abs(dx)) return;
-      swipeActive.current = true;
-      setDetailPreviewDirection(dx < 0 ? 1 : -1);
-      setDetailSwipeActive(true);
-      setShowSwipeHint(false);
-    }
-    lookTranslateX.setValue(dx);
-  }
-  function handleLookSwipeEnd(pageX: number, pageY: number) {
-    if (!swipeStart.current) return;
-    const dx = pageX - swipeStart.current.x;
-    const dy = pageY - swipeStart.current.y;
-    swipeStart.current = null;
-    const wasSwipe = swipeActive.current;
-    swipeActive.current = false;
-    setDetailSwipeActive(false);
-    if (!wasSwipe || Math.abs(dx) < 85 || Math.abs(dx) <= Math.abs(dy) * 1.05) {
-      Animated.spring(lookTranslateX, {
-        toValue: 0,
-        friction: 7,
-        tension: 72,
-        useNativeDriver: true,
-      }).start();
-      return;
-    }
-    completeLookSwipe(dx < 0 ? 1 : -1);
+    setSelected(detailLooks[nextIndex]);
+    requestAnimationFrame(() => mainScrollRef.current?.scrollTo({ y: 0, animated: false }));
   }
   function showDetailHeartPulse() {
     detailHeartPulse.stopAnimation();
@@ -455,7 +395,7 @@ export default function App() {
     ]).start();
   }
   function handleDetailImageTap() {
-    if(!selected || swipeActive.current || lookTransitioning.current) return;
+    if(!selected) return;
     const now=Date.now();
     if(now-detailLastTap.current<290){
       detailLastTap.current=0;
@@ -485,8 +425,8 @@ export default function App() {
 
   if (booting) return <AppLoadingScreen progress={bootProgress} message={bootMessage} />;
 
-  return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>{screen !== 'home' && <View style={styles.fixedBackWrap}><Pressable onPress={goBack} style={styles.backButton}><View style={styles.backButtonIcon}><Text style={styles.backButtonArrow}>‹</Text></View><Text style={styles.backButtonText}>Back</Text><Text style={styles.backButtonSpark}>✦</Text></Pressable></View>}<ScrollView ref={mainScrollRef} scrollEnabled={screen!=='look'||!detailSwipeActive} directionalLockEnabled={true} alwaysBounceVertical={screen!=='look'} bounces={screen!=='look'} onTouchStart={e=>{if(screen==='look'){swipeStart.current={x:e.nativeEvent.pageX,y:e.nativeEvent.pageY};swipeActive.current=false;}}} onTouchMove={e=>{if(screen==='look')handleLookSwipeMove(e.nativeEvent.pageX,e.nativeEvent.pageY);}} onTouchEnd={e=>{if(screen==='look') handleLookSwipeEnd(e.nativeEvent.pageX,e.nativeEvent.pageY);}} onTouchCancel={()=>{swipeStart.current=null;swipeActive.current=false;setDetailSwipeActive(false);Animated.spring(lookTranslateX,{toValue:0,useNativeDriver:true}).start();}} onScroll={e=>{if(screen==='home'&&tab==='Discover') discoverScrollY.current=e.nativeEvent.contentOffset.y;}} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={screen==='look'?styles.detailContent:styles.content}>
-    <Animated.View style={screen==='look'?{opacity:1}:{opacity:pageOpacity,transform:[{translateY:pageTranslateY}]}}>
+  return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>{screen !== 'home' && <View style={styles.fixedBackWrap}><Pressable onPress={goBack} style={styles.backButton}><View style={styles.backButtonIcon}><Text style={styles.backButtonArrow}>‹</Text></View><Text style={styles.backButtonText}>Back</Text><Text style={styles.backButtonSpark}>✦</Text></Pressable></View>}<ScrollView ref={mainScrollRef} onScroll={e=>{if(screen==='home'&&tab==='Discover') discoverScrollY.current=e.nativeEvent.contentOffset.y;}} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.content}>
+    <Animated.View style={{opacity:pageOpacity,transform:[{translateY:pageTranslateY}]}}>
     {screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'studio' ? <StudioScreen session={session} studio={studio} looks={looks} bookings={bookings} onRefresh={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} onOpenBooking={openAppointment} onOpenReviews={openStudioReviews} onOpenLook={(look) => { setSelected(look); setScreen('look'); }} onStudioCreated={async () => { await refresh(session?.user.id); setToast({title:'Studio created',detail:'Your studio is live. Add your first design or available appointment.',type:'success'}); }} />
     : screen === 'appointment' && selectedBooking ? <AppointmentScreen booking={selectedBooking} session={session} onStatus={async (id,status) => { await changeBooking(id,status); await refresh(session?.user.id); const refreshed = bookings.find(b => b.id === id); if (refreshed) setSelectedBooking({...refreshed,status}); }} onRatingSaved={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} />
@@ -495,8 +435,7 @@ export default function App() {
     : screen === 'admin-feedback' && session && isAdmin ? <AdminFeedbackInboxScreen session={session} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'legal' ? <LegalScreen pageKey={legalKey} onOpen={openLegal} onDelete={async () => { await deleteMyAccount(); setSelectedBooking(null); setSelected(null); setScreen('home'); setTab('Discover'); setToast({title:'Account deleted',detail:'Your Nailly account and associated data have been deleted.',type:'success'}); }} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'reviews' && reviewStudio ? <StudioReviewsScreen studio={reviewStudio} />
-    : screen === 'look' && selected ? <View style={styles.lookSwipeStack}>{previewLook&&<Animated.View pointerEvents="none" style={[styles.lookPreviewLayer,{opacity:lookTranslateX.interpolate({inputRange:[-detailScreenWidth,0,detailScreenWidth],outputRange:[1,.15,1],extrapolate:'clamp'}),transform:[{translateX:detailPreviewDirection===1?lookTranslateX.interpolate({inputRange:[-detailScreenWidth,0],outputRange:[0,detailScreenWidth],extrapolate:'clamp'}):lookTranslateX.interpolate({inputRange:[0,detailScreenWidth],outputRange:[-detailScreenWidth,0],extrapolate:'clamp'})},{scale:lookTranslateX.interpolate({inputRange:[-detailScreenWidth,0,detailScreenWidth],outputRange:[1,.985,1],extrapolate:'clamp'})}]}]}><View style={styles.lookHeroWrap}><Image source={{uri:previewLook.image_url}} style={styles.heroImage}/></View><View style={styles.lookTitleRow}><View style={{flex:1}}><Text style={styles.eyebrow}>NAIL STUDIO · {previewLook.studios.city.toUpperCase()}</Text><Text style={styles.title}>{previewLook.studios.name}</Text></View></View><Text style={styles.body}>{previewLook.studios.bio || 'Discover the artist behind this look.'}</Text><View style={styles.pill}><Text style={styles.pillText}>✦ {previewLook.title}  ·  From €{previewLook.price_eur}</Text></View></Animated.View>}<Animated.View style={[styles.lookCurrentLayer,{transform:[{translateX:lookTranslateX},{scale:lookTranslateX.interpolate({inputRange:[-220,0,220],outputRange:[.992,1,.992],extrapolate:'clamp'})}]}]}><View style={styles.lookHeroWrap}><Pressable onPress={handleDetailImageTap} style={styles.detailImageTapArea}><Image source={{ uri: selected.image_url }} style={styles.heroImage} /><Animated.View pointerEvents="none" style={[styles.detailDoubleTapHeartOverlay,{opacity:detailHeartPulse,transform:[{scale:detailHeartPulse.interpolate({inputRange:[0,1],outputRange:[.5,1]})}]}]}><Text style={styles.detailDoubleTapHeartText}>♥</Text></Animated.View></Pressable><View style={styles.lookHeroTopActions}><Pressable onPress={()=>toggleSaved(selected.id)} style={[styles.lookFavoriteButton,saved.includes(selected.id)&&styles.lookFavoriteButtonSaved]}><View style={styles.lookFavoriteHeartWrap}><Text style={[styles.lookFavoriteHeart,saved.includes(selected.id)&&styles.lookFavoriteHeartSaved]}>{saved.includes(selected.id)?'♥':'♡'}</Text></View></Pressable>{ownsSelectedLook && <Pressable style={styles.lookEditButton} onPress={() => setScreen('edit-look')}><Text style={styles.lookEditButtonText}>✎</Text></Pressable>}</View>{showSwipeHint&&detailLooks.length>1&&<View style={styles.lookSwipeCoach}><Text style={styles.lookSwipeCoachArrow}>↔</Text><View><Text style={styles.lookSwipeCoachTitle}>Swipe</Text><Text style={styles.lookSwipeCoachText}>left or right to explore</Text></View></View>}</View><View style={styles.lookTitleRow}><View style={{flex:1}}><Text style={styles.eyebrow}>NAIL STUDIO · {selected.studios.city.toUpperCase()}</Text><Text style={styles.title}>{selected.studios.name}</Text></View>{ownsSelectedLook && <View style={styles.ownerBadge}><Text style={styles.ownerBadgeText}>YOUR DESIGN</Text></View>}</View><Text style={styles.body}>{selected.studios.bio || 'Discover the artist behind this look.'}</Text><Pressable style={styles.reviewsButton} onPress={() => openStudioReviews(selected.studios)}><View style={styles.reviewsButtonIcon}><Text style={styles.reviewsButtonStar}>★</Text></View><View style={{flex:1}}><Text style={styles.reviewsButtonTitle}>Studio reviews</Text><Text style={styles.reviewsButtonMeta}>{studioRatings[selected.studio_id]?.rating_count ? `${studioRatings[selected.studio_id].avg_rating?.toFixed(1)} · ${studioRatings[selected.studio_id].rating_count} verified ratings` : 'No reviews yet'}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable><View style={styles.pill}><Text style={styles.pillText}>✦ {selected.title}  ·  From €{selected.price_eur}</Text></View>{ownsSelectedLook ? <View style={styles.ownerNotice}><Text style={styles.ownerNoticeTitle}>Studio owner view</Text><Text style={styles.ownerNoticeText}>You cannot book your own studio. Use the edit button to update this design or open your studio dashboard to manage availability.</Text><Button label="Open studio dashboard" secondary onPress={() => setScreen('studio')} /></View> : <><Text style={styles.section}>Available appointments</Text>{slots.length ? slots.map(slot => <Pressable key={slot.id} style={styles.slot} onPress={() => requestBooking(slot)} disabled={busy}><Text style={styles.slotText}>{formatTime(slot.starts_at)}</Text><Text style={styles.link}>{busy ? 'Please wait' : 'Request →'}</Text></Pressable>) : <Text style={styles.body}>No free times listed yet.</Text>}</>}{selected.studios.address && <Text style={styles.body}>⌖ {selected.studios.address}, {selected.studios.city}</Text>}</Animated.View></View>
-    : screen === 'results' ? <><Text style={styles.eyebrow}>YOUR INSPIRATION</Text><Text style={styles.title}>Find your look.</Text>{photo && <Pressable style={styles.uploaded} onPress={choosePhoto} disabled={photoPicking}><Image source={{ uri: photo }} style={styles.thumb} /><Text style={styles.cardTitle}>Your photo  ·  Change</Text></Pressable>}{photo && <Button label="Remove photo · Show all studios" secondary onPress={removePhoto} />}<Text style={styles.section}>Similar designs</Text><Text style={styles.body}>{matchState}</Text>{matchLoading ? <View style={styles.processingPanel} accessibilityLiveRegion="polite"><ActivityIndicator size="large" color={colors.coral} /><Text style={styles.processingTitle}>Finding your nail match…</Text><Text style={styles.processingDetail}>Your photo is being processed. Results will appear automatically.</Text></View> : <>{!session && <Button label="Sign in to search" onPress={() => setScreen('auth')} />}{inspiration.current && <Button label="Search this photo again" secondary onPress={() => { if (inspiration.current) void searchPhoto(inspiration.current); }} />}{matchedLooks.length ? grid(matchedLooks, matchScores) : !matchFailed ? <Empty title="No matches to show" detail="Search results will appear here after your photo is compared with indexed studio designs." /> : null}</>}</>
+    : screen === 'look' && selected ? <><View style={styles.lookHeroWrap}><Pressable onPress={handleDetailImageTap} style={styles.detailImageTapArea}><Image source={{ uri: selected.image_url }} style={styles.heroImage} /><Animated.View pointerEvents="none" style={[styles.detailDoubleTapHeartOverlay,{opacity:detailHeartPulse,transform:[{scale:detailHeartPulse.interpolate({inputRange:[0,1],outputRange:[.5,1]})}]}]}><Text style={styles.detailDoubleTapHeartText}>♥</Text></Animated.View></Pressable><View style={styles.lookHeroTopActions}><Pressable onPress={()=>toggleSaved(selected.id)} style={[styles.lookFavoriteButton,saved.includes(selected.id)&&styles.lookFavoriteButtonSaved]}><View style={styles.lookFavoriteHeartWrap}><Text style={[styles.lookFavoriteHeart,saved.includes(selected.id)&&styles.lookFavoriteHeartSaved]}>{saved.includes(selected.id)?'♥':'♡'}</Text></View></Pressable>{ownsSelectedLook && <Pressable style={styles.lookEditButton} onPress={() => setScreen('edit-look')}><Text style={styles.lookEditButtonText}>✎</Text></Pressable>}</View></View>{detailLooks.length>1&&<><Pressable accessibilityLabel="Previous design" onPress={()=>moveLook(-1)} style={[styles.designNavButton,styles.designNavLeft]}><Text style={styles.designNavSpark}>✦</Text><Text style={styles.designNavArrow}>‹</Text></Pressable><Pressable accessibilityLabel="Next design" onPress={()=>moveLook(1)} style={[styles.designNavButton,styles.designNavRight]}><Text style={styles.designNavArrow}>›</Text><Text style={styles.designNavSpark}>✦</Text></Pressable></>}</View><View style={styles.lookTitleRow}><View style={{flex:1}}><Text style={styles.eyebrow}>NAIL STUDIO · {selected.studios.city.toUpperCase()}</Text><Text style={styles.title}>{selected.studios.name}</Text></View>{ownsSelectedLook && <View style={styles.ownerBadge}><Text style={styles.ownerBadgeText}>YOUR DESIGN</Text></View>}</View><Text style={styles.body}>{selected.studios.bio || 'Discover the artist behind this look.'}</Text><Pressable style={styles.reviewsButton} onPress={() => openStudioReviews(selected.studios)}><View style={styles.reviewsButtonIcon}><Text style={styles.reviewsButtonStar}>★</Text></View><View style={{flex:1}}><Text style={styles.reviewsButtonTitle}>Studio reviews</Text><Text style={styles.reviewsButtonMeta}>{studioRatings[selected.studio_id]?.rating_count ? `${studioRatings[selected.studio_id].avg_rating?.toFixed(1)} · ${studioRatings[selected.studio_id].rating_count} verified ratings` : 'No reviews yet'}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable><View style={styles.pill}><Text style={styles.pillText}>✦ {selected.title}  ·  From €{selected.price_eur}</Text></View>{ownsSelectedLook ? <View style={styles.ownerNotice}><Text style={styles.ownerNoticeTitle}>Studio owner view</Text><Text style={styles.ownerNoticeText}>You cannot book your own studio. Use the edit button to update this design or open your studio dashboard to manage availability.</Text><Button label="Open studio dashboard" secondary onPress={() => setScreen('studio')} /></View> : <><Text style={styles.section}>Available appointments</Text>{slots.length ? slots.map(slot => <Pressable key={slot.id} style={styles.slot} onPress={() => requestBooking(slot)} disabled={busy}><Text style={styles.slotText}>{formatTime(slot.starts_at)}</Text><Text style={styles.link}>{busy ? 'Please wait' : 'Request →'}</Text></Pressable>) : <Text style={styles.body}>No free times listed yet.</Text>}</>}{selected.studios.address && <Text style={styles.body}>⌖ {selected.studios.address}, {selected.studios.city}</Text>}</>    : screen === 'results' ? <><Text style={styles.eyebrow}>YOUR INSPIRATION</Text><Text style={styles.title}>Find your look.</Text>{photo && <Pressable style={styles.uploaded} onPress={choosePhoto} disabled={photoPicking}><Image source={{ uri: photo }} style={styles.thumb} /><Text style={styles.cardTitle}>Your photo  ·  Change</Text></Pressable>}{photo && <Button label="Remove photo · Show all studios" secondary onPress={removePhoto} />}<Text style={styles.section}>Similar designs</Text><Text style={styles.body}>{matchState}</Text>{matchLoading ? <View style={styles.processingPanel} accessibilityLiveRegion="polite"><ActivityIndicator size="large" color={colors.coral} /><Text style={styles.processingTitle}>Finding your nail match…</Text><Text style={styles.processingDetail}>Your photo is being processed. Results will appear automatically.</Text></View> : <>{!session && <Button label="Sign in to search" onPress={() => setScreen('auth')} />}{inspiration.current && <Button label="Search this photo again" secondary onPress={() => { if (inspiration.current) void searchPhoto(inspiration.current); }} />}{matchedLooks.length ? grid(matchedLooks, matchScores) : !matchFailed ? <Empty title="No matches to show" detail="Search results will appear here after your photo is compared with indexed studio designs." /> : null}</>}</>
     : tab === 'Discover' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><View style={styles.discoverHero}><View style={styles.discoverHeroOrbOne}/><View style={styles.discoverHeroOrbTwo}/><View style={styles.discoverHeroCopy}><View style={styles.discoverEyebrowRow}><View style={styles.discoverEyebrowLine}/><Text style={styles.discoverEyebrow}>YOUR NEXT NAIL MOMENT</Text></View><Text style={styles.discoverHeroTitle}>Find the nails</Text><Text style={styles.discoverHeroAccent}>you love.</Text><Text style={styles.discoverHeroLede}>From inspiration to the artist who can make it yours.</Text><View style={styles.discoverMicroProof}><View style={styles.discoverProofDot}/><Text style={styles.discoverProofText}>Discover · save · book</Text></View></View><View style={styles.discoverHeroVisual}><View style={styles.discoverImageFrame}><Image source={{uri:'https://naillyapp.com/assets/look-pearl.webp'}} style={styles.discoverHeroImage}/></View><View style={styles.discoverFloatingHeart}><Text style={styles.discoverFloatingHeartText}>♡</Text></View><Text style={styles.discoverHeroSpark}>✦</Text></View></View>{upcomingAppointment && <Pressable style={styles.upcomingCard} onPress={() => openAppointment(upcomingAppointment)}><View style={styles.upcomingIcon}><Text style={styles.upcomingIconText}>▤</Text></View><View style={{flex:1}}><Text style={styles.upcomingLabel}>{upcomingAppointment.studios?.owner_id === session?.user.id ? 'UPCOMING CLIENT APPOINTMENT' : 'YOUR NEXT APPOINTMENT'}</Text><Text style={styles.upcomingTitle}>{upcomingAppointment.studios?.name || 'Nail studio'}</Text><Text style={styles.upcomingMeta}>{formatTime(upcomingAppointment.starts_at)} · {upcomingAppointment.status}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>}<Pressable style={styles.upload} onPress={choosePhoto} disabled={photoPicking}>{photoPicking ? <ActivityIndicator color={colors.coral} style={{ marginRight: 13 }} /> : <Text style={styles.camera}>▧</Text>}<View><Text style={styles.cardTitle}>Upload inspiration</Text><Text style={styles.caption}>Choose a photo from your gallery</Text></View></Pressable><Text style={styles.section}>Explore nail looks</Text><TextInput value={query} onChangeText={setQuery} placeholder="Search design, studio or city" placeholderTextColor="#ad9ca5" style={[styles.input, { marginBottom: 20 }]} />{looks.length ? grid(filteredLooks) : <Empty title="The gallery is growing" detail="Studios will appear here once they publish their first designs." />}</>
     : tab === 'Saved' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Saved looks</Text>{!session ? <Button label="Sign in to save looks" onPress={() => setScreen('auth')} /> : saved.length ? grid(looks.filter(look => saved.includes(look.id))) : <Empty title="Your collection starts here" detail="Tap the heart on a nail look to save it." />}</>
     : tab === 'Bookings' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Appointments</Text>{!session ? <Button label="Sign in to view bookings" onPress={() => setScreen('auth')} /> : bookings.filter(b => b.client_id === session.user.id).length ? bookings.filter(b => b.client_id === session.user.id).map(b => <Pressable key={b.id} style={styles.appointmentListCard} onPress={() => openAppointment(b)}>{b.portfolio_looks?.image_url ? <Image source={{uri:b.portfolio_looks.image_url}} style={styles.appointmentThumb}/> : <View style={styles.appointmentThumbFallback}><Text style={styles.appointmentThumbIcon}>▤</Text></View>}<View style={{flex:1}}><Text style={styles.cardTitle}>{b.studios?.name || 'Nail studio'}</Text><Text style={styles.caption}>{formatTime(b.starts_at)}</Text><Text style={styles.appointmentStatus}>{b.status.toUpperCase()}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>) : <Empty title="Nothing booked yet" detail="Choose a studio and request an available time." />}</>
@@ -1139,7 +1078,7 @@ const styles = StyleSheet.create({
   matchTrack: { width: '100%', height: 6, backgroundColor: '#f0dfdc', borderRadius: 999, marginTop: 6, overflow: 'hidden' },
   matchFill: { height: '100%', minWidth: 2, backgroundColor: colors.coral, borderRadius: 999 },
   matchHint: { color: colors.muted, fontSize: 8, lineHeight: 11, fontWeight: '700', marginTop: 6 },
-  safe: { flex: 1, backgroundColor: colors.canvas }, keyboardAvoider: { flex: 1 }, content: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 120 }, detailContent: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 88 }, brand: { fontSize: 31, fontWeight: '800', color: colors.ink, letterSpacing: -1.5, marginBottom: 26 }, eyebrow: { color: colors.coral, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12 }, headline: { fontFamily: 'Georgia', fontSize: 44, lineHeight: 51, color: colors.ink, marginBottom: 12 }, title: { fontFamily: 'Georgia', fontSize: 36, color: colors.ink, marginBottom: 16 }, section: { fontFamily: 'Georgia', fontSize: 23, color: colors.ink, marginTop: 28, marginBottom: 16 }, body: { color: colors.muted, fontSize: 15, lineHeight: 23, marginBottom: 20 },
+  safe: { flex: 1, backgroundColor: colors.canvas }, keyboardAvoider: { flex: 1 }, content: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 120 }, brand: { fontSize: 31, fontWeight: '800', color: colors.ink, letterSpacing: -1.5, marginBottom: 26 }, eyebrow: { color: colors.coral, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12 }, headline: { fontFamily: 'Georgia', fontSize: 44, lineHeight: 51, color: colors.ink, marginBottom: 12 }, title: { fontFamily: 'Georgia', fontSize: 36, color: colors.ink, marginBottom: 16 }, section: { fontFamily: 'Georgia', fontSize: 23, color: colors.ink, marginTop: 28, marginBottom: 16 }, body: { color: colors.muted, fontSize: 15, lineHeight: 23, marginBottom: 20 },
   discoverHero: { minHeight: 278, borderRadius: 30, backgroundColor: colors.cream, borderWidth: 1, borderColor: colors.edge, overflow: 'hidden', position: 'relative', flexDirection: 'row', alignItems: 'center', paddingLeft: 20, paddingVertical: 24, paddingRight: 10, marginBottom: 22 },
   discoverHeroOrbOne: { position: 'absolute', width: 210, height: 210, borderRadius: 105, backgroundColor: '#f8dcd7', opacity: .68, right: -88, top: -70 },
   discoverHeroOrbTwo: { position: 'absolute', width: 130, height: 130, borderRadius: 65, backgroundColor: colors.blush, opacity: .62, left: -60, bottom: -76 },
@@ -1169,10 +1108,12 @@ const styles = StyleSheet.create({
   navAvatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: colors.edge },
   navAvatarActive: { borderColor: colors.coral, borderWidth: 2.5 },
   navLabelSlot: { height: 16, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  navLabel: { fontSize: 10, lineHeight: 12, color: colors.muted, fontWeight: '600', textAlign: 'center' }, active: { color: colors.coral, fontWeight: '700' }, fixedBackWrap: { position: 'absolute', left: 20, top: 8, zIndex: 30 },
-  backButton: { alignSelf: 'flex-start', height: 42, paddingLeft: 5, paddingRight: 12, borderRadius: 21, backgroundColor: '#fff1f5', borderWidth: 1, borderColor: '#f3d8e0', flexDirection: 'row', alignItems: 'center', shadowColor: colors.ink, shadowOpacity: .05, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 }, backButtonIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', marginRight: 7 }, backButtonArrow: { color: colors.coralDeep, fontSize: 27, lineHeight: 28, marginTop: -2 }, backButtonText: { color: colors.ink, fontSize: 12, fontWeight: '900' }, backButtonSpark: { color: '#d78cac', fontSize: 11, marginLeft: 7 }, lookSwipeStack: { position: 'relative', overflow: 'hidden', backgroundColor: colors.canvas },
-  lookPreviewLayer: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.canvas, zIndex: 0 },
-  lookCurrentLayer: { backgroundColor: colors.canvas, zIndex: 1 },
+  navLabel: { fontSize: 10, lineHeight: 12, color: colors.muted, fontWeight: '600', textAlign: 'center' }, active: { color: colors.coral, fontWeight: '700' }, fixedBackWrap: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8, backgroundColor: colors.canvas, zIndex: 20 },
+  backButton: { alignSelf: 'flex-start', height: 42, paddingLeft: 5, paddingRight: 12, borderRadius: 21, backgroundColor: '#fff1f5', borderWidth: 1, borderColor: '#f3d8e0', flexDirection: 'row', alignItems: 'center', shadowColor: colors.ink, shadowOpacity: .05, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 }, backButtonIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', marginRight: 7 }, backButtonArrow: { color: colors.coralDeep, fontSize: 27, lineHeight: 28, marginTop: -2 }, backButtonText: { color: colors.ink, fontSize: 12, fontWeight: '900' }, backButtonSpark: { color: '#d78cac', fontSize: 11, marginLeft: 7 }, designNavButton: { position: 'absolute', top: 118, minWidth: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,246,250,.97)', borderWidth: 1, borderColor: '#f1cddd', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 9, shadowColor: colors.ink, shadowOpacity: .10, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 5 },
+  designNavLeft: { left: 12 },
+  designNavRight: { right: 12 },
+  designNavArrow: { color: '#c95f92', fontSize: 31, lineHeight: 32, fontWeight: '500', marginTop: -2 },
+  designNavSpark: { color: '#e3a2bf', fontSize: 9, marginHorizontal: 2 },
   detailImageTapArea: { position: 'relative' }, heroImage: { width: '100%', height: 290, borderRadius: 24, marginBottom: 23, backgroundColor: colors.blush }, detailDoubleTapHeartOverlay: { position: 'absolute', left: 0, right: 0, top: 0, height: 290, alignItems: 'center', justifyContent: 'center' }, detailDoubleTapHeartText: { color: 'rgba(255,255,255,.97)', fontSize: 82, lineHeight: 88, textShadowColor: 'rgba(69,38,56,.24)', textShadowRadius: 16, textShadowOffset: { width: 0, height: 5 } },
   lookHeroTopActions: { position: 'absolute', right: 12, top: 12, flexDirection: 'row', gap: 8 },
   lookFavoriteButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,.94)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,.98)', shadowColor: colors.ink, shadowOpacity: .10, shadowRadius: 10, shadowOffset: { width:0,height:5 }, elevation:4 },
