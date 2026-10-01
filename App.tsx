@@ -240,11 +240,11 @@ export default function App() {
   useEffect(() => { if (selected) listSlots(selected.studio_id).then(setSlots).catch(e => setError(friendlyError(e))); }, [selected]);
   useEffect(() => {
     setShowSwipeHint(false);
-    if (screen !== 'look' || !selected || detailLooks.length <= 1) return;
+    if (screen !== 'look' || looks.length <= 1) return;
     const showTimer = setTimeout(() => setShowSwipeHint(true), 2500);
     const hideTimer = setTimeout(() => setShowSwipeHint(false), 6000);
     return () => { clearTimeout(showTimer); clearTimeout(hideTimer); };
-  }, [screen, selected?.id, detailLooks.length]);
+  }, [screen, looks.length]);
   useEffect(() => {
     requestAnimationFrame(() => {
       if (screen === 'home' && tab === 'Discover' && restoreDiscoverScroll.current) {
