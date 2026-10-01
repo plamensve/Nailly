@@ -48,6 +48,14 @@
         "projectId": "4e4f26f1-6ca9-43c0-a01e-b1ddcc763f63"
       }
     },
-    "icon": "./assets/icon.png"
+    "icon": "./assets/icon.png",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/4e4f26f1-6ca9-43c0-a01e-b1ddcc763f63",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }
