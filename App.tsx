@@ -490,6 +490,18 @@ export default function App() {
 
   if (booting) return <AppLoadingScreen progress={bootProgress} message={bootMessage} />;
 
+  if (!session && screen !== 'reset-password') {
+    return <SafeAreaView style={styles.guestSafe}>
+      <StatusBar barStyle="dark-content" />
+      <KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.guestContent}>
+          <AuthScreen onDone={() => { setTab('Discover'); setScreen('home'); }} notify={(title,detail,type)=>setToast({title,detail,type})}/>
+        </ScrollView>
+        {toast && <View style={styles.toastWrap}><Toast title={toast.title} detail={toast.detail} type={toast.type} onClose={()=>setToast(null)}/></View>}
+      </KeyboardAvoidingView>
+    </SafeAreaView>;
+  }
+
   return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>{screen !== 'home' && screen !== 'reset-password' && <View style={styles.fixedBackWrap}><Pressable onPress={goBack} style={styles.backButton}><View style={styles.backButtonIcon}><Text style={styles.backButtonArrow}>‹</Text></View><Text style={styles.backButtonText}>Back</Text><Text style={styles.backButtonSpark}>✦</Text></Pressable></View>}<ScrollView ref={mainScrollRef} onScroll={e=>{if(screen==='home'&&tab==='Discover') discoverScrollY.current=e.nativeEvent.contentOffset.y;}} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.content}>
     <Animated.View style={{opacity:pageOpacity,transform:[{translateY:pageTranslateY}]}}>
     {screen === 'reset-password' ? <ResetPasswordScreen onDone={() => { setScreen('auth'); }} notify={(title,detail,type) => setToast({title,detail,type})} />
@@ -1325,15 +1337,40 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
   }
 
   return <>
-    <Text style={styles.eyebrow}>WELCOME TO NAILLY</Text>
-    <Text style={styles.title}>{register ? 'Join Nailly' : 'Welcome back'}</Text>
-    <Text style={styles.body}>{register ? 'Find your next look or share your work with clients.' : 'Sign in to save looks and manage appointments.'}</Text>
-    {register && <><Field label="Your name" value={name} onChangeText={setName} placeholder="Your name" /><Text style={styles.fieldLabel}>Account type</Text><View style={styles.choiceRow}><Pressable onPress={() => setArtist(false)} style={[styles.choice, !artist && styles.choiceActive]}><Text style={styles.choiceText}>Client</Text></Pressable><Pressable onPress={() => setArtist(true)} style={[styles.choice, artist && styles.choiceActive]}><Text style={styles.choiceText}>Nail artist / studio</Text></Pressable></View></>}
-    <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="you@example.com" />
-    <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 6 characters" />
-    {!register&&<Pressable disabled={busy} onPress={openForgotPassword} style={styles.forgotPasswordLink}><Text style={styles.forgotPasswordText}>Forgot your password?</Text><Text style={styles.forgotPasswordArrow}>→</Text></Pressable>}
-    <Button label={busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} />
-    <Button label={register ? 'I already have an account' : 'Create a new account'} secondary onPress={() => setRegister(!register)} />
+    <View style={styles.guestHero}>
+      <View style={styles.guestGlowOne}/>
+      <View style={styles.guestGlowTwo}/>
+      <Text style={styles.guestSparkOne}>✦</Text>
+      <Text style={styles.guestSparkTwo}>✦</Text>
+      <View style={styles.guestBrandRow}>
+        <Text style={styles.guestBrand}>nailly<Text style={{color:colors.coral}}>.</Text></Text>
+        <View style={styles.guestBadge}><Text style={styles.guestBadgeText}>NAIL DISCOVERY</Text></View>
+      </View>
+      <Text style={styles.guestKicker}>YOUR BEAUTY SPACE</Text>
+      <Text style={styles.guestTitle}>{register ? 'Create your Nailly space.' : 'Welcome to your next nail obsession.'}</Text>
+      <Text style={styles.guestSubtitle}>{register ? 'Save inspiration, discover artists and manage appointments in one beautifully simple place.' : 'Discover designs. Save the ones you love. Find artists and turn inspiration into appointments.'}</Text>
+      <View style={styles.guestFeatureRow}>
+        <View style={styles.guestFeaturePill}><Text style={styles.guestFeatureIcon}>♡</Text><Text style={styles.guestFeatureText}>Save looks</Text></View>
+        <View style={styles.guestFeaturePill}><Text style={styles.guestFeatureIcon}>⌕</Text><Text style={styles.guestFeatureText}>AI match</Text></View>
+        <View style={styles.guestFeaturePill}><Text style={styles.guestFeatureIcon}>✦</Text><Text style={styles.guestFeatureText}>Book artists</Text></View>
+      </View>
+    </View>
+
+    <View style={styles.guestAuthCard}>
+      <View style={styles.guestAuthHead}>
+        <Text style={styles.guestAuthKicker}>{register?'CREATE ACCOUNT':'MEMBER ACCESS'}</Text>
+        <Text style={styles.guestAuthTitle}>{register?'Join Nailly':'Sign in'}</Text>
+        <Text style={styles.guestAuthText}>{register?'Choose how you want to use Nailly and create your profile.':'Enter your details to continue to your Nailly space.'}</Text>
+      </View>
+      {register && <><Field label="Your name" value={name} onChangeText={setName} placeholder="Your name" /><Text style={styles.fieldLabel}>I’m joining as</Text><View style={styles.guestChoiceRow}><Pressable onPress={() => setArtist(false)} style={[styles.guestChoice, !artist && styles.guestChoiceActive]}><Text style={styles.guestChoiceIcon}>♡</Text><Text style={styles.guestChoiceTitle}>Client</Text><Text style={styles.guestChoiceText}>Discover & book</Text></Pressable><Pressable onPress={() => setArtist(true)} style={[styles.guestChoice, artist && styles.guestChoiceActive]}><Text style={styles.guestChoiceIcon}>✦</Text><Text style={styles.guestChoiceTitle}>Nail artist</Text><Text style={styles.guestChoiceText}>Show your work</Text></Pressable></View></>}
+      <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="you@example.com" />
+      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 6 characters" />
+      {!register&&<Pressable disabled={busy} onPress={openForgotPassword} style={styles.forgotPasswordLink}><Text style={styles.forgotPasswordText}>Forgot your password?</Text><Text style={styles.forgotPasswordArrow}>→</Text></Pressable>}
+      <Pressable disabled={busy} onPress={submit} style={[styles.guestPrimaryButton,busy&&{opacity:.6}]}>{busy?<ActivityIndicator color="white"/>:<><Text style={styles.guestPrimaryButtonText}>{register?'Create my account':'Enter Nailly'}</Text><Text style={styles.guestPrimaryArrow}>→</Text></>}</Pressable>
+      <View style={styles.guestDivider}><View style={styles.guestDividerLine}/><Text style={styles.guestDividerText}>OR</Text><View style={styles.guestDividerLine}/></View>
+      <Pressable disabled={busy} style={styles.guestSecondaryButton} onPress={() => setRegister(!register)}><Text style={styles.guestSecondaryButtonText}>{register?'I already have an account':'Create a new account'}</Text></Pressable>
+      <Text style={styles.guestLegalText}>By continuing, you agree to Nailly’s Terms and acknowledge the Privacy Policy.</Text>
+    </View>
 
     <Modal transparent visible={showEmailConfirm} animationType="fade" onRequestClose={()=>setShowEmailConfirm(false)}>
       <View style={styles.naillyModalBackdrop}>
@@ -1758,6 +1795,46 @@ const styles = StyleSheet.create({
   photoOrderButtonDisabled: { opacity: .3 },
   photoOrderText: { color: 'white', fontSize: 24, lineHeight: 27, fontWeight: '800' },
   photoOrderPosition: { color: 'white', backgroundColor: 'rgba(69,38,56,.72)', fontSize: 10, fontWeight: '900', minWidth: 28, height: 24, lineHeight: 24, textAlign: 'center', marginHorizontal: 5, borderRadius: 12 },
+
+  // Logged-out luxury welcome
+  guestSafe: { flex: 1, backgroundColor: '#fffafc' },
+  guestContent: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 34 },
+  guestHero: { position: 'relative', overflow: 'hidden', backgroundColor: '#452638', borderRadius: 32, paddingHorizontal: 22, paddingTop: 22, paddingBottom: 24, marginBottom: 14, minHeight: 300, shadowColor: '#452638', shadowOpacity: .20, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 7 },
+  guestGlowOne: { position: 'absolute', width: 210, height: 210, borderRadius: 105, backgroundColor: '#7b4963', right: -72, top: -86, opacity: .76 },
+  guestGlowTwo: { position: 'absolute', width: 145, height: 145, borderRadius: 73, backgroundColor: '#66384f', left: -56, bottom: -66, opacity: .9 },
+  guestSparkOne: { position: 'absolute', right: 32, top: 90, color: '#f6b4c8', fontFamily: 'Georgia', fontSize: 22 },
+  guestSparkTwo: { position: 'absolute', right: 70, top: 127, color: '#d98eaa', fontFamily: 'Georgia', fontSize: 11 },
+  guestBrandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
+  guestBrand: { color: 'white', fontFamily: 'Georgia', fontSize: 31, fontWeight: '700', letterSpacing: -1.1 },
+  guestBadge: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,.20)', backgroundColor: 'rgba(255,255,255,.08)', paddingHorizontal: 10, paddingVertical: 6 },
+  guestBadgeText: { color: '#ead7e1', fontSize: 7, fontWeight: '900', letterSpacing: 1 },
+  guestKicker: { color: '#efb5cb', fontSize: 8, fontWeight: '900', letterSpacing: 1.4, marginTop: 30, zIndex: 2 },
+  guestTitle: { color: 'white', fontFamily: 'Georgia', fontSize: 32, lineHeight: 38, letterSpacing: -.6, marginTop: 6, maxWidth: 305, zIndex: 2 },
+  guestSubtitle: { color: '#e2d2da', fontSize: 10, lineHeight: 17, marginTop: 9, maxWidth: 305, zIndex: 2 },
+  guestFeatureRow: { flexDirection: 'row', gap: 6, marginTop: 18, zIndex: 2 },
+  guestFeaturePill: { flex: 1, minHeight: 50, borderRadius: 17, backgroundColor: 'rgba(255,255,255,.09)', borderWidth: 1, borderColor: 'rgba(255,255,255,.13)', paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center' },
+  guestFeatureIcon: { color: '#f7bfd1', fontSize: 15, fontWeight: '800', marginBottom: 2 },
+  guestFeatureText: { color: '#f2e8ed', fontSize: 8, fontWeight: '800' },
+  guestAuthCard: { backgroundColor: 'white', borderRadius: 28, borderWidth: 1, borderColor: '#efe1e7', padding: 19, shadowColor: '#6f4058', shadowOpacity: .08, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 4 },
+  guestAuthHead: { marginBottom: 16 },
+  guestAuthKicker: { color: '#a76d88', fontSize: 8, fontWeight: '900', letterSpacing: 1.2 },
+  guestAuthTitle: { color: colors.ink, fontFamily: 'Georgia', fontSize: 27, lineHeight: 32, marginTop: 3 },
+  guestAuthText: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 4 },
+  guestChoiceRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  guestChoice: { flex: 1, minHeight: 92, borderRadius: 18, borderWidth: 1, borderColor: '#eadde3', backgroundColor: '#fffafb', padding: 12, justifyContent: 'center' },
+  guestChoiceActive: { backgroundColor: '#fff0f5', borderColor: '#d99ab5' },
+  guestChoiceIcon: { color: '#bd6f93', fontSize: 17, marginBottom: 5 },
+  guestChoiceTitle: { color: colors.ink, fontSize: 11, fontWeight: '900' },
+  guestChoiceText: { color: colors.muted, fontSize: 8, marginTop: 2 },
+  guestPrimaryButton: { minHeight: 53, borderRadius: 18, backgroundColor: '#452638', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 4, shadowColor: '#452638', shadowOpacity: .16, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
+  guestPrimaryButtonText: { color: 'white', fontSize: 12, fontWeight: '900' },
+  guestPrimaryArrow: { color: '#f6c3d4', fontSize: 17, marginLeft: 8 },
+  guestDivider: { flexDirection: 'row', alignItems: 'center', marginVertical: 13 },
+  guestDividerLine: { flex: 1, height: 1, backgroundColor: '#f0e5e9' },
+  guestDividerText: { color: '#b3a4ac', fontSize: 7, fontWeight: '900', marginHorizontal: 9 },
+  guestSecondaryButton: { minHeight: 48, borderRadius: 17, backgroundColor: '#fff5f8', borderWidth: 1, borderColor: '#efdae3', alignItems: 'center', justifyContent: 'center' },
+  guestSecondaryButtonText: { color: colors.ink, fontSize: 10, fontWeight: '900' },
+  guestLegalText: { color: '#a89aa1', fontSize: 7, lineHeight: 11, textAlign: 'center', marginTop: 12, paddingHorizontal: 12 },
 
   // Profile
   profileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
