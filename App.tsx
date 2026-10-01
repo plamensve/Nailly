@@ -122,6 +122,7 @@ export default function App() {
   const [bootProgress, setBootProgress] = useState(8);
   const [bootMessage, setBootMessage] = useState('Preparing Nailly…');
   const [showSwipeHint, setShowSwipeHint] = useState(false);
+  const [detailSwipeActive, setDetailSwipeActive] = useState(false);
 
   const refresh = useCallback(async (userId?: string) => {
     try {
@@ -389,6 +390,7 @@ export default function App() {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       if (Math.abs(dy) > Math.abs(dx)) return;
       swipeActive.current = true;
+      setDetailSwipeActive(true);
       setShowSwipeHint(false);
     }
     lookTranslateX.setValue(dx);
@@ -400,6 +402,7 @@ export default function App() {
     swipeStart.current = null;
     const wasSwipe = swipeActive.current;
     swipeActive.current = false;
+    setDetailSwipeActive(false);
     if (!wasSwipe || Math.abs(dx) < 85 || Math.abs(dx) <= Math.abs(dy) * 1.05) {
       Animated.spring(lookTranslateX, {
         toValue: 0,
@@ -431,8 +434,7 @@ export default function App() {
 
   if (booting) return <AppLoadingScreen progress={bootProgress} message={bootMessage} />;
 
-  return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}><ScrollView ref={mainScrollRef} onTouchStart={e=>{if(screen==='look'){swipeStart.current={x:e.nativeEvent.pageX,y:e.nativeEvent.pageY};swipeActive.current=false;}}} onTouchMove={e=>{if(screen==='look')handleLookSwipeMove(e.nativeEvent.pageX,e.nativeEvent.pageY);}} onTouchEnd={e=>{if(screen==='look') handleLookSwipeEnd(e.nativeEvent.pageX,e.nativeEvent.pageY);}} onTouchCancel={()=>{swipeStart.current=null;swipeActive.current=false;Animated.spring(lookTranslateX,{toValue:0,useNativeDriver:true}).start();}} onScroll={e=>{if(screen==='home'&&tab==='Discover') discoverScrollY.current=e.nativeEvent.contentOffset.y;}} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.content}>
-    {screen !== 'home' && <Pressable onPress={goBack} style={styles.backButton}><View style={styles.backButtonIcon}><Text style={styles.backButtonArrow}>‹</Text></View><Text style={styles.backButtonText}>Back</Text><Text style={styles.backButtonSpark}>✦</Text></Pressable>}
+  return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>{screen !== 'home' && <View style={styles.fixedBackWrap}><Pressable onPress={goBack} style={styles.backButton}><View style={styles.backButtonIcon}><Text style={styles.backButtonArrow}>‹</Text></View><Text style={styles.backButtonText}>Back</Text><Text style={styles.backButtonSpark}>✦</Text></Pressable></View>}<ScrollView ref={mainScrollRef} scrollEnabled={screen!=='look'||!detailSwipeActive} directionalLockEnabled={true} alwaysBounceVertical={screen!=='look'} bounces={screen!=='look'} onTouchStart={e=>{if(screen==='look'){swipeStart.current={x:e.nativeEvent.pageX,y:e.nativeEvent.pageY};swipeActive.current=false;}}} onTouchMove={e=>{if(screen==='look')handleLookSwipeMove(e.nativeEvent.pageX,e.nativeEvent.pageY);}} onTouchEnd={e=>{if(screen==='look') handleLookSwipeEnd(e.nativeEvent.pageX,e.nativeEvent.pageY);}} onTouchCancel={()=>{swipeStart.current=null;swipeActive.current=false;setDetailSwipeActive(false);Animated.spring(lookTranslateX,{toValue:0,useNativeDriver:true}).start();}} onScroll={e=>{if(screen==='home'&&tab==='Discover') discoverScrollY.current=e.nativeEvent.contentOffset.y;}} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.content}>
     <Animated.View style={{opacity:pageOpacity,transform:[{translateY:pageTranslateY}]}}>
     {screen === 'auth' ? <AuthScreen onDone={() => { setTab('Profile'); setScreen('home'); }} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'studio' ? <StudioScreen session={session} studio={studio} looks={looks} bookings={bookings} onRefresh={() => refresh(session?.user.id)} notify={(title,detail,type) => setToast({title,detail,type})} onOpenBooking={openAppointment} onOpenReviews={openStudioReviews} onOpenLook={(look) => { setSelected(look); setScreen('look'); }} onStudioCreated={async () => { await refresh(session?.user.id); setToast({title:'Studio created',detail:'Your studio is live. Add your first design or available appointment.',type:'success'}); }} />
@@ -1116,7 +1118,8 @@ const styles = StyleSheet.create({
   navAvatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: colors.edge },
   navAvatarActive: { borderColor: colors.coral, borderWidth: 2.5 },
   navLabelSlot: { height: 16, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  navLabel: { fontSize: 10, lineHeight: 12, color: colors.muted, fontWeight: '600', textAlign: 'center' }, active: { color: colors.coral, fontWeight: '700' }, backButton: { alignSelf: 'flex-start', height: 42, paddingLeft: 5, paddingRight: 12, borderRadius: 21, backgroundColor: '#fff1f5', borderWidth: 1, borderColor: '#f3d8e0', flexDirection: 'row', alignItems: 'center', marginBottom: 18, shadowColor: colors.ink, shadowOpacity: .05, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 }, backButtonIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', marginRight: 7 }, backButtonArrow: { color: colors.coralDeep, fontSize: 27, lineHeight: 28, marginTop: -2 }, backButtonText: { color: colors.ink, fontSize: 12, fontWeight: '900' }, backButtonSpark: { color: '#d78cac', fontSize: 11, marginLeft: 7 }, heroImage: { width: '100%', height: 290, borderRadius: 24, marginBottom: 23, backgroundColor: colors.blush },
+  navLabel: { fontSize: 10, lineHeight: 12, color: colors.muted, fontWeight: '600', textAlign: 'center' }, active: { color: colors.coral, fontWeight: '700' }, fixedBackWrap: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8, backgroundColor: colors.canvas, zIndex: 20 },
+  backButton: { alignSelf: 'flex-start', height: 42, paddingLeft: 5, paddingRight: 12, borderRadius: 21, backgroundColor: '#fff1f5', borderWidth: 1, borderColor: '#f3d8e0', flexDirection: 'row', alignItems: 'center', shadowColor: colors.ink, shadowOpacity: .05, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 }, backButtonIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', marginRight: 7 }, backButtonArrow: { color: colors.coralDeep, fontSize: 27, lineHeight: 28, marginTop: -2 }, backButtonText: { color: colors.ink, fontSize: 12, fontWeight: '900' }, backButtonSpark: { color: '#d78cac', fontSize: 11, marginLeft: 7 }, heroImage: { width: '100%', height: 290, borderRadius: 24, marginBottom: 23, backgroundColor: colors.blush },
   lookHeroTopActions: { position: 'absolute', right: 12, top: 12, flexDirection: 'row', gap: 8 },
   lookFavoriteButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,.94)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,.98)', shadowColor: colors.ink, shadowOpacity: .10, shadowRadius: 10, shadowOffset: { width:0,height:5 }, elevation:4 },
   lookFavoriteButtonSaved: { backgroundColor: '#fff0f5', borderColor: '#f4ccd8' },
