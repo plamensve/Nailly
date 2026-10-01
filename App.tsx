@@ -517,7 +517,7 @@ export default function App() {
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} contentContainerStyle={styles.guestContent}>
-          <AuthScreen onDone={() => { setTab('Discover'); setScreen('home'); }} notify={(title,detail,type)=>setToast({title,detail,type})}/>
+          <AuthScreen onDone={() => { setTab('Discover'); setScreen('home'); }} notify={()=>undefined}/>
         </ScrollView>
         {toast && <View style={styles.toastWrap}><Toast title={toast.title} detail={toast.detail} type={toast.type} onClose={()=>setToast(null)}/></View>}
       </KeyboardAvoidingView>
@@ -1368,9 +1368,11 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
   const [resetEmail,setResetEmail]=useState('');
   const [resetSent,setResetSent]=useState(false);
   const [authError,setAuthError]=useState<string|null>(null);
+  const [authErrorTitle,setAuthErrorTitle]=useState('Sign in failed');
 
   async function submit() {
     setAuthError(null);
+    setAuthErrorTitle(register ? 'Could not create account' : 'Sign in failed');
     if (!email.trim() || password.length < 6 || (register && !name.trim())) {
       const detail = register ? 'Enter a name, email and a password of at least 6 characters.' : 'Enter your email and a password of at least 6 characters.';
       setAuthError(detail);
@@ -1396,8 +1398,8 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
       const detail = friendlyError(e);
       const invalidCredentials = /invalid login credentials|invalid credentials|email or password|wrong password/i.test(detail);
       const errorMessage = invalidCredentials ? 'The email or password you entered is incorrect. Please try again.' : detail;
+      setAuthErrorTitle(invalidCredentials ? 'Incorrect email or password' : (register ? 'Could not create account' : 'Could not sign in'));
       setAuthError(errorMessage);
-      if (register) notify('Could not create account', errorMessage, 'error');
     } finally {
       setBusy(false);
     }
@@ -1478,7 +1480,7 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
       {register && <><Field label="Your name" value={name} onChangeText={setName} placeholder="Your name" /><Text style={styles.fieldLabel}>I’m joining as</Text><View style={styles.guestChoiceRow}><Pressable onPress={() => setArtist(false)} style={[styles.guestChoice, !artist && styles.guestChoiceActive]}><Text style={styles.guestChoiceIcon}>♡</Text><Text style={styles.guestChoiceTitle}>Client</Text><Text style={styles.guestChoiceText}>Discover & book</Text></Pressable><Pressable onPress={() => setArtist(true)} style={[styles.guestChoice, artist && styles.guestChoiceActive]}><Text style={styles.guestChoiceIcon}>✦</Text><Text style={styles.guestChoiceTitle}>Nail artist</Text><Text style={styles.guestChoiceText}>Show your work</Text></Pressable></View></>}
       <Field label="Email" value={email} onChangeText={(value)=>{setEmail(value);if(authError)setAuthError(null);}} keyboardType="email-address" placeholder="you@example.com" />
       <Field label="Password" value={password} onChangeText={(value)=>{setPassword(value);if(authError)setAuthError(null);}} secureTextEntry placeholder="At least 6 characters" />
-      {!register&&authError&&<View style={styles.authErrorBox}><View style={styles.authErrorIcon}><Text style={styles.authErrorIconText}>!</Text></View><View style={{flex:1}}><Text style={styles.authErrorTitle}>Sign in failed</Text><Text style={styles.authErrorText}>{authError}</Text></View></View>}
+      {authError&&<View style={styles.authErrorBox}><View style={styles.authErrorIcon}><Text style={styles.authErrorIconText}>!</Text></View><View style={{flex:1}}><Text style={styles.authErrorTitle}>{authErrorTitle}</Text><Text style={styles.authErrorText}>{authError}</Text></View></View>}
       {!register&&<Pressable disabled={busy} onPress={openForgotPassword} style={styles.forgotPasswordLink}><Text style={styles.forgotPasswordText}>Forgot your password?</Text><Text style={styles.forgotPasswordArrow}>→</Text></Pressable>}
       <Pressable disabled={busy} onPress={submit} style={[styles.guestPrimaryButton,busy&&{opacity:.6}]}>{busy?<ActivityIndicator color="white"/>:<><Text style={styles.guestPrimaryButtonText}>{register?'Create my account':'Enter Nailly'}</Text><Text style={styles.guestPrimaryArrow}>→</Text></>}</Pressable>
       <View style={styles.guestDivider}><View style={styles.guestDividerLine}/><Text style={styles.guestDividerText}>OR</Text><View style={styles.guestDividerLine}/></View>
