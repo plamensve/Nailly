@@ -1367,9 +1367,15 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
   const [forgotMode,setForgotMode]=useState(false);
   const [resetEmail,setResetEmail]=useState('');
   const [resetSent,setResetSent]=useState(false);
+  const [authError,setAuthError]=useState<string|null>(null);
 
   async function submit() {
-    if (!email.trim() || password.length < 6 || (register && !name.trim())) { notify('Check your details', 'Enter a name, email and a password of at least 6 characters.', 'info'); return; }
+    setAuthError(null);
+    if (!email.trim() || password.length < 6 || (register && !name.trim())) {
+      const detail = register ? 'Enter a name, email and a password of at least 6 characters.' : 'Enter your email and a password of at least 6 characters.';
+      setAuthError(detail);
+      return;
+    }
     setBusy(true);
     try {
       if (register) {
@@ -1389,11 +1395,9 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
     } catch (e) {
       const detail = friendlyError(e);
       const invalidCredentials = /invalid login credentials|invalid credentials|email or password|wrong password/i.test(detail);
-      notify(
-        invalidCredentials ? 'Incorrect email or password' : 'Could not sign in',
-        invalidCredentials ? 'The email or password you entered is incorrect. Please try again.' : detail,
-        'error'
-      );
+      const errorMessage = invalidCredentials ? 'The email or password you entered is incorrect. Please try again.' : detail;
+      setAuthError(errorMessage);
+      if (register) notify('Could not create account', errorMessage, 'error');
     } finally {
       setBusy(false);
     }
@@ -1472,8 +1476,9 @@ function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:str
         <Text style={styles.guestAuthText}>{register?'Choose how you want to use Nailly and create your profile.':'Enter your details to continue to your Nailly space.'}</Text>
       </View>
       {register && <><Field label="Your name" value={name} onChangeText={setName} placeholder="Your name" /><Text style={styles.fieldLabel}>I’m joining as</Text><View style={styles.guestChoiceRow}><Pressable onPress={() => setArtist(false)} style={[styles.guestChoice, !artist && styles.guestChoiceActive]}><Text style={styles.guestChoiceIcon}>♡</Text><Text style={styles.guestChoiceTitle}>Client</Text><Text style={styles.guestChoiceText}>Discover & book</Text></Pressable><Pressable onPress={() => setArtist(true)} style={[styles.guestChoice, artist && styles.guestChoiceActive]}><Text style={styles.guestChoiceIcon}>✦</Text><Text style={styles.guestChoiceTitle}>Nail artist</Text><Text style={styles.guestChoiceText}>Show your work</Text></Pressable></View></>}
-      <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="you@example.com" />
-      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 6 characters" />
+      <Field label="Email" value={email} onChangeText={(value)=>{setEmail(value);if(authError)setAuthError(null);}} keyboardType="email-address" placeholder="you@example.com" />
+      <Field label="Password" value={password} onChangeText={(value)=>{setPassword(value);if(authError)setAuthError(null);}} secureTextEntry placeholder="At least 6 characters" />
+      {!register&&authError&&<View style={styles.authErrorBox}><View style={styles.authErrorIcon}><Text style={styles.authErrorIconText}>!</Text></View><View style={{flex:1}}><Text style={styles.authErrorTitle}>Sign in failed</Text><Text style={styles.authErrorText}>{authError}</Text></View></View>}
       {!register&&<Pressable disabled={busy} onPress={openForgotPassword} style={styles.forgotPasswordLink}><Text style={styles.forgotPasswordText}>Forgot your password?</Text><Text style={styles.forgotPasswordArrow}>→</Text></Pressable>}
       <Pressable disabled={busy} onPress={submit} style={[styles.guestPrimaryButton,busy&&{opacity:.6}]}>{busy?<ActivityIndicator color="white"/>:<><Text style={styles.guestPrimaryButtonText}>{register?'Create my account':'Enter Nailly'}</Text><Text style={styles.guestPrimaryArrow}>→</Text></>}</Pressable>
       <View style={styles.guestDivider}><View style={styles.guestDividerLine}/><Text style={styles.guestDividerText}>OR</Text><View style={styles.guestDividerLine}/></View>
@@ -1946,6 +1951,12 @@ const styles = StyleSheet.create({
   guestSecondaryButton: { minHeight: 48, borderRadius: 17, backgroundColor: '#fff5f8', borderWidth: 1, borderColor: '#efdae3', alignItems: 'center', justifyContent: 'center' },
   guestSecondaryButtonText: { color: colors.ink, fontSize: 10, fontWeight: '900' },
   guestLegalText: { color: '#a89aa1', fontSize: 7, lineHeight: 11, textAlign: 'center', marginTop: 12, paddingHorizontal: 12 },
+
+  authErrorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff1f3', borderWidth: 1, borderColor: '#efc8d1', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginTop: 2, marginBottom: 8 },
+  authErrorIcon: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#f6d6dd', alignItems: 'center', justifyContent: 'center', marginRight: 9 },
+  authErrorIconText: { color: '#ad4f62', fontSize: 13, fontWeight: '900' },
+  authErrorTitle: { color: '#8e3f51', fontSize: 10, fontWeight: '900' },
+  authErrorText: { color: '#8b6570', fontSize: 9, lineHeight: 13, marginTop: 1 },
 
   // Profile
   profileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
