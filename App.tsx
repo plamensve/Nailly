@@ -36,10 +36,10 @@ function DiscoverIcon({ size = 34 }: { size?: number }) {
 function BookingClockIcon({ size = 35 }: { size?: number }) {
   const color = '#9b72b0';
   return <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-    <View style={{ width: size * .70, height: size * .70, borderRadius: size, borderWidth: 2.2, borderColor: color }} />
-    <View style={{ position: 'absolute', width: 2.2, height: size * .18, borderRadius: 99, backgroundColor: color, top: size * .29 }} />
-    <View style={{ position: 'absolute', width: size * .18, height: 2.2, borderRadius: 99, backgroundColor: color, left: size * .50, top: size * .49, transform: [{ rotate: '28deg' }] }} />
-    <View style={{ position: 'absolute', width: 4.2, height: 4.2, borderRadius: 3, backgroundColor: color }} />
+    <View style={{ width: size * .88, height: size * .88, borderRadius: size, borderWidth: 2.4, borderColor: color, backgroundColor: 'rgba(248,241,255,.55)' }} />
+    <View style={{ position: 'absolute', width: 2.4, height: size * .22, borderRadius: 99, backgroundColor: color, top: size * .22 }} />
+    <View style={{ position: 'absolute', width: size * .22, height: 2.4, borderRadius: 99, backgroundColor: color, left: size * .51, top: size * .49, transform: [{ rotate: '28deg' }] }} />
+    <View style={{ position: 'absolute', width: 4.8, height: 4.8, borderRadius: 3, backgroundColor: color }} />
   </View>;
 }
 
