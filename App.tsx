@@ -1198,7 +1198,7 @@ function SettingsScreen({
 
     <Text style={styles.settingsSectionLabel}>PRIVACY & DATA</Text>
     <View style={styles.settingsGroup}>
-      <Pressable style={styles.settingsItem} onPress={()=>onLegal('privacy')}><View style={styles.settingsItemIcon}><View style={styles.privacyShieldIcon}><View style={styles.privacyShieldLock}><View style={styles.privacyShieldShackle}/><View style={styles.privacyShieldLockBody}/></View></View></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy Policy</Text><Text style={styles.settingsItemText}>How Nailly handles your personal data.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
+      <Pressable style={styles.settingsItem} onPress={()=>onLegal('privacy')}><View style={[styles.settingsItemIcon,styles.privacyIconTile]}><View style={styles.privacyShield}><View style={styles.privacyShieldInner}><View style={styles.privacyLock}><View style={styles.privacyLockShackle}/><View style={styles.privacyLockBody}><View style={styles.privacyLockKeyhole}/></View></View></View></View></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy Policy</Text><Text style={styles.settingsItemText}>How Nailly handles your personal data.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('gdpr')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✓</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Privacy & GDPR rights</Text><Text style={styles.settingsItemText}>Access, correction and deletion rights.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('terms')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>§</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Terms of Service</Text><Text style={styles.settingsItemText}>Rules for using Nailly as a client or artist.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
       <Pressable style={styles.settingsItem} onPress={()=>onLegal('community')}><View style={styles.settingsItemIcon}><Text style={styles.settingsItemIconText}>✦</Text></View><View style={{flex:1}}><Text style={styles.settingsItemTitle}>Community Guidelines</Text><Text style={styles.settingsItemText}>Standards for content, reviews and behaviour.</Text></View><Text style={styles.settingsItemArrow}>›</Text></Pressable>
@@ -1963,10 +1963,13 @@ const styles = StyleSheet.create({
   settingsGroup: { backgroundColor: 'white', borderRadius: 20, borderWidth: 1, borderColor: colors.edge, overflow: 'hidden', marginBottom: 16 },
   settingsItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f4eaee' },
   settingsItemIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: '#fff3f7', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
-  privacyShieldIcon: { width: 22, height: 24, borderWidth: 2, borderColor: '#9c5f7c', borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  privacyShieldLock: { width: 10, height: 11, alignItems: 'center', justifyContent: 'flex-end' },
-  privacyShieldShackle: { position: 'absolute', top: 0, width: 7, height: 7, borderWidth: 1.5, borderColor: '#9c5f7c', borderBottomWidth: 0, borderTopLeftRadius: 5, borderTopRightRadius: 5 },
-  privacyShieldLockBody: { width: 9, height: 7, borderRadius: 2, backgroundColor: '#9c5f7c' },
+  privacyIconTile: { backgroundColor: '#fff0f3', borderColor: '#f5d7df', borderWidth: 1 },
+  privacyShield: { width: 25, height: 28, borderWidth: 2, borderColor: '#b66b89', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomLeftRadius: 14, borderBottomRightRadius: 14, alignItems: 'center', justifyContent: 'center', transform: [{scaleX: 0.92}] },
+  privacyShieldInner: { width: 19, height: 21, borderRadius: 9, backgroundColor: '#f8dfe6', alignItems: 'center', justifyContent: 'center' },
+  privacyLock: { width: 12, height: 15, alignItems: 'center', justifyContent: 'flex-end' },
+  privacyLockShackle: { position: 'absolute', top: 0, width: 8, height: 8, borderWidth: 2, borderColor: '#8e4e6d', borderBottomWidth: 0, borderTopLeftRadius: 5, borderTopRightRadius: 5 },
+  privacyLockBody: { width: 12, height: 9, borderRadius: 3, backgroundColor: '#a85f7e', alignItems: 'center', justifyContent: 'center' },
+  privacyLockKeyhole: { width: 2.5, height: 4, borderRadius: 2, backgroundColor: '#fff5f7' },
   settingsItemIconText: { color: '#a96483', fontSize: 16, fontWeight: '900' },
   settingsItemTitle: { color: colors.ink, fontSize: 11, fontWeight: '900' },
   settingsItemText: { color: colors.muted, fontSize: 9, lineHeight: 13, marginTop: 2, paddingRight: 8 },
