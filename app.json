@@ -8,7 +8,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.nailly.app",
+      "bundleIdentifier": "com.naillyapp.nailly",
       "buildNumber": "1",
       "config": {
         "usesNonExemptEncryption": false
