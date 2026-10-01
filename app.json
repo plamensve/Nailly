@@ -3,17 +3,24 @@
     "name": "Nailly",
     "slug": "nailly",
     "scheme": "nailly",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.nailly.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Choose a manicure photo to explore nail designs."
       }
     },
     "android": {
+      "package": "com.nailly.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#fce8e4"
       }
@@ -27,9 +34,10 @@
         }
       ]
     ],
-    "splash": {
-      "backgroundColor": "#fff8f8",
-      "resizeMode": "contain"
+    "extra": {
+      "supportUrl": "https://naillyapp.com/support.html",
+      "privacyUrl": "https://naillyapp.com/privacy.html",
+      "accountDeletionUrl": "https://naillyapp.com/delete-account.html"
     }
   }
 }
