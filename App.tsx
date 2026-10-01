@@ -116,7 +116,7 @@ export default function App() {
   const [toast, setToast] = useState<{title:string;detail:string;type?:'success'|'error'|'info'} | null>(null);
   const [tab, setTab] = useState<Tab>('Discover');
   const [profileSection, setProfileSection] = useState<'saved' | 'appointments' | 'designs' | null>(null);
-  const [screen, setScreen] = useState<'home' | 'results' | 'look' | 'auth' | 'studio' | 'appointment' | 'edit-look' | 'legal' | 'reviews' | 'feedback' | 'admin-feedback' | 'admin-moderation'>('home');
+  const [screen, setScreen] = useState<'home' | 'results' | 'look' | 'auth' | 'studio' | 'appointment' | 'edit-look' | 'legal' | 'reviews' | 'feedback' | 'admin-feedback' | 'admin-moderation' | 'contact'>('home');
   const [looks, setLooks] = useState<Look[]>([]);
   const [studioRatings, setStudioRatings] = useState<Record<string,{avg_rating:number|null;rating_count:number}>>({});
   const [saved, setSaved] = useState<string[]>([]);
@@ -485,6 +485,7 @@ export default function App() {
     : screen === 'feedback' && session ? <FeedbackCenterScreen session={session} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'admin-feedback' && session && isAdmin ? <AdminFeedbackInboxScreen session={session} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'admin-moderation' && session && isAdmin ? <AdminModerationScreen notify={(title,detail,type) => setToast({title,detail,type})} />
+    : screen === 'contact' ? <ContactScreen />
     : screen === 'legal' ? <LegalScreen pageKey={legalKey} onOpen={openLegal} onDelete={async () => { await deleteMyAccount(); setSelectedBooking(null); setSelected(null); setScreen('home'); setTab('Discover'); setToast({title:'Account deleted',detail:'Your Nailly account and associated data have been deleted.',type:'success'}); }} notify={(title,detail,type) => setToast({title,detail,type})} />
     : screen === 'reviews' && reviewStudio ? <StudioReviewsScreen studio={reviewStudio} onReport={(bookingId)=>reportContent('review',bookingId,null)} />
     : screen === 'look' && selected ? <><View style={styles.lookHeroWrap}><Pressable onPress={handleDetailImageTap} style={styles.detailImageTapArea}><Image source={{ uri: selected.image_url }} style={styles.heroImage} /><Animated.View pointerEvents="none" style={[styles.detailDoubleTapHeartOverlay,{opacity:detailHeartPulse,transform:[{scale:detailHeartPulse.interpolate({inputRange:[0,1],outputRange:[.5,1]})}]}]}><Text style={styles.detailDoubleTapHeartText}>♥</Text></Animated.View></Pressable><View style={styles.lookHeroTopActions}><Pressable onPress={()=>toggleSaved(selected.id)} style={[styles.lookFavoriteButton,saved.includes(selected.id)&&styles.lookFavoriteButtonSaved]}><View style={styles.lookFavoriteHeartWrap}><Text style={[styles.lookFavoriteHeart,saved.includes(selected.id)&&styles.lookFavoriteHeartSaved]}>{saved.includes(selected.id)?'♥':'♡'}</Text></View></Pressable>{ownsSelectedLook && <Pressable style={styles.lookEditButton} onPress={() => setScreen('edit-look')}><Text style={styles.lookEditButtonText}>✎</Text></Pressable>}</View>{detailLooks.length>1&&<><Pressable accessibilityLabel="Previous design" onPress={()=>moveLook(-1)} style={[styles.designNavButton,styles.designNavLeft]}><Text style={styles.designNavSpark}>✦</Text><Text style={styles.designNavArrow}>‹</Text></Pressable><Pressable accessibilityLabel="Next design" onPress={()=>moveLook(1)} style={[styles.designNavButton,styles.designNavRight]}><Text style={styles.designNavArrow}>›</Text><Text style={styles.designNavSpark}>✦</Text></Pressable></>}</View><View style={styles.lookTitleRow}><View style={{flex:1}}><Text style={styles.eyebrow}>NAIL STUDIO · {selected.studios.city.toUpperCase()}</Text><Text style={styles.title}>{selected.studios.name}</Text></View>{ownsSelectedLook && <View style={styles.ownerBadge}><Text style={styles.ownerBadgeText}>YOUR DESIGN</Text></View>}</View><Text style={styles.body}>{selected.studios.bio || 'Discover the artist behind this look.'}</Text><Pressable style={styles.reviewsButton} onPress={() => openStudioReviews(selected.studios)}><View style={styles.reviewsButtonIcon}><Text style={styles.reviewsButtonStar}>★</Text></View><View style={{flex:1}}><Text style={styles.reviewsButtonTitle}>Studio reviews</Text><Text style={styles.reviewsButtonMeta}>{studioRatings[selected.studio_id]?.rating_count ? `${studioRatings[selected.studio_id].avg_rating?.toFixed(1)} · ${studioRatings[selected.studio_id].rating_count} verified ratings` : 'No reviews yet'}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable><View style={styles.pill}><Text style={styles.pillText}>✦ {selected.title}  ·  From €{selected.price_eur}</Text></View>{!ownsSelectedLook&&<View style={styles.safetyActions}><Pressable style={styles.safetyAction} onPress={()=>reportContent('design',selected.id,selected.studios.owner_id)}><Text style={styles.safetyActionIcon}>⚑</Text><Text style={styles.safetyActionText}>Report design</Text></Pressable><Pressable style={styles.safetyAction} onPress={()=>blockUser(selected.studios.owner_id,selected.studios.name)}><Text style={styles.safetyActionIcon}>⊘</Text><Text style={styles.safetyActionText}>Block studio</Text></Pressable></View>}{ownsSelectedLook ? <View style={styles.ownerNotice}><Text style={styles.ownerNoticeTitle}>Studio owner view</Text><Text style={styles.ownerNoticeText}>You cannot book your own studio. Use the edit button to update this design or open your studio dashboard to manage availability.</Text><Button label="Open studio dashboard" secondary onPress={() => setScreen('studio')} /></View> : <><Text style={styles.section}>Available appointments</Text>{slots.length ? slots.map(slot => <Pressable key={slot.id} style={styles.slot} onPress={() => requestBooking(slot)} disabled={busy}><Text style={styles.slotText}>{formatTime(slot.starts_at)}</Text><Text style={styles.link}>{busy ? 'Please wait' : 'Request →'}</Text></Pressable>) : <Text style={styles.body}>No free times listed yet.</Text>}</>}{selected.studios.address && <Text style={styles.body}>⌖ {selected.studios.address}, {selected.studios.city}</Text>}</>    : screen === 'results' ? <><Text style={styles.eyebrow}>YOUR INSPIRATION</Text><Text style={styles.title}>Find your look.</Text>{photo && <Pressable style={styles.uploaded} onPress={choosePhoto} disabled={photoPicking}><Image source={{ uri: photo }} style={styles.thumb} /><Text style={styles.cardTitle}>Your photo  ·  Change</Text></Pressable>}{photo && <Button label="Remove photo · Show all studios" secondary onPress={removePhoto} />}<Text style={styles.section}>Similar designs</Text><Text style={styles.body}>{matchState}</Text>{matchLoading ? <View style={styles.processingPanel} accessibilityLiveRegion="polite"><ActivityIndicator size="large" color={colors.coral} /><Text style={styles.processingTitle}>Finding your nail match…</Text><Text style={styles.processingDetail}>Your photo is being processed. Results will appear automatically.</Text></View> : <>{!session && <Button label="Sign in to search" onPress={() => setScreen('auth')} />}{inspiration.current && <Button label="Search this photo again" secondary onPress={() => { if (inspiration.current) void searchPhoto(inspiration.current); }} />}{matchedLooks.length ? grid(matchedLooks, matchScores) : !matchFailed ? <Empty title="No matches to show" detail="Search results will appear here after your photo is compared with indexed studio designs." /> : null}</>}</>
@@ -492,7 +493,7 @@ export default function App() {
     : tab === 'Saved' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Saved looks</Text>{!session ? <Button label="Sign in to save looks" onPress={() => setScreen('auth')} /> : saved.length ? grid(looks.filter(look => saved.includes(look.id))) : <Empty title="Your collection starts here" detail="Tap the heart on a nail look to save it." />}</>
     : tab === 'Bookings' ? <><Text style={styles.brand}>nailly<Text style={{ color: colors.coral }}>.</Text></Text><Text style={styles.title}>Appointments</Text>{!session ? <Button label="Sign in to view bookings" onPress={() => setScreen('auth')} /> : bookings.filter(b => b.client_id === session.user.id).length ? bookings.filter(b => b.client_id === session.user.id).map(b => <Pressable key={b.id} style={styles.appointmentListCard} onPress={() => openAppointment(b)}>{b.portfolio_looks?.image_url ? <Image source={{uri:b.portfolio_looks.image_url}} style={styles.appointmentThumb}/> : <View style={styles.appointmentThumbFallback}><Text style={styles.appointmentThumbIcon}>▤</Text></View>}<View style={{flex:1}}><Text style={styles.cardTitle}>{b.studios?.name || 'Nail studio'}</Text><Text style={styles.caption}>{formatTime(b.starts_at)}</Text><Text style={styles.appointmentStatus}>{b.status.toUpperCase()}</Text></View><Text style={styles.rowChevron}>›</Text></Pressable>) : <Empty title="Nothing booked yet" detail="Choose a studio and request an available time." />}</>
     : <><View style={styles.profileTop}><Text style={styles.brandCompact}>nailly<Text style={{color:colors.coral}}>.</Text></Text><Text style={styles.profileKicker}>MY NAILLY</Text></View>{session ? <><View style={styles.profileCard}><View style={styles.profileGlowOne}/><View style={styles.profileGlowTwo}/><Text style={styles.profileSparkOne}>✦</Text><Text style={styles.profileSparkTwo}>✦</Text><View style={styles.profileAvatarHalo}><Pressable style={styles.avatarPress} onPress={async()=>{try{const asset=await pickPortfolioImage();if(!asset)return;await uploadAvatar(session.user.id,asset);await refresh(session.user.id);setToast({title:'Profile photo updated',detail:'Your new photo is live.',type:'success'});}catch(e){setToast({title:'Photo upload failed',detail:friendlyError(e),type:'error'});}}}>{profile?.avatar_url?<Image source={{uri:profile.avatar_url}} style={styles.avatarLarge}/>:<View style={styles.avatarFallbackLarge}><Text style={styles.avatarLetter}>{(profile?.display_name||session.user.email||'N').charAt(0).toUpperCase()}</Text></View>}<View style={styles.avatarEditLarge}><Text style={styles.avatarEditText}>＋</Text></View></Pressable></View><Text style={styles.profileNameLarge}>{profile?.display_name||session.user.user_metadata?.display_name||'Nailly member'}</Text><View style={[styles.roleBadge,isAdmin&&styles.adminRoleBadge]}><Text style={[styles.roleBadgeText,isAdmin&&styles.adminRoleBadgeText]}>{isAdmin?'✦ Nailly Admin':role==='artist'?'✦ Nail artist':'♡ Nail lover'}</Text></View><View style={styles.profileMetaPill}><Text style={styles.profileEmail}>{session.user.email}</Text></View><Text style={styles.changePhoto}>Tap your photo to update</Text></View><View style={styles.statRow}><Pressable onPress={()=>setProfileSection(profileSection==='saved'?null:'saved')} style={[styles.statCard,profileSection==='saved'&&styles.statCardActive]}><Text style={styles.statNumber}>{saved.length}</Text><Text style={[styles.statLabel,profileSection==='saved'&&styles.statLabelActive]}>Saved</Text></Pressable><Pressable onPress={()=>setProfileSection(profileSection==='appointments'?null:'appointments')} style={[styles.statCard,profileSection==='appointments'&&styles.statCardActive]}><Text style={styles.statNumber}>{role==='artist'?profileAppointments.filter(x=>x.status!=='cancelled').length:profileAppointments.filter(x=>x.status!=='cancelled').length}</Text><Text style={[styles.statLabel,profileSection==='appointments'&&styles.statLabelActive]}>Appointments</Text>{role==='artist'&&pendingStudioRequests>0&&<Text style={styles.pendingStat}>{pendingStudioRequests} pending</Text>}</Pressable>{role==='artist'?<Pressable onPress={()=>setProfileSection(profileSection==='designs'?null:'designs')} style={[styles.statCard,profileSection==='designs'&&styles.statCardActive]}><Text style={styles.statNumber}>{studio?looks.filter(x=>x.studio_id===studio.id).length:0}</Text><Text style={[styles.statLabel,profileSection==='designs'&&styles.statLabelActive]}>Designs</Text></Pressable>:<Pressable onPress={()=>{setTab('Discover');setScreen('home')}} style={styles.statCard}><Text style={styles.statNumber}>♡</Text><Text style={styles.statLabel}>Discover</Text></Pressable>}</View>{role==='artist'?(studio?<Pressable style={styles.studioPreview} onPress={()=>setScreen('studio')}><View style={styles.studioPreviewTop}><View style={styles.studioMark}><Text style={styles.studioMarkText}>✦</Text></View><View style={{flex:1}}><Text style={styles.studioPreviewLabel}>YOUR STUDIO</Text><Text style={styles.studioPreviewName}>{studio.name}</Text><Text style={styles.studioPreviewMeta}>⌖ {studio.city}{studio.address?' · '+studio.address:''}</Text></View><Text style={styles.chevron}>›</Text></View><Text style={styles.studioPreviewBio} numberOfLines={2}>{studio.bio||'Add a description to tell clients what makes your studio special.'}</Text><View style={styles.manageBar}><Text style={styles.manageBarText}>Open studio dashboard</Text><Text style={styles.manageBarText}>→</Text></View></Pressable>:<View style={styles.ctaCard}><Text style={styles.ctaIcon}>✦</Text><Text style={styles.ctaTitle}>Build your studio presence</Text><Text style={styles.ctaText}>Create a polished profile, publish your work and receive appointment requests.</Text><Button label="Create your studio" onPress={()=>setScreen('studio')}/></View>):<><Text style={styles.sectionSmall}>Your shortcuts</Text><View style={styles.actionGrid}><Pressable style={styles.actionCard} onPress={()=>{setTab('Discover');setScreen('home')}}><View style={styles.shortcutIconWrap}><DiscoverIcon size={36}/></View><Text style={styles.actionTitle}>Discover</Text><Text style={styles.actionText}>Find your next look</Text></Pressable><Pressable style={styles.actionCard} onPress={()=>{setTab('Saved');setScreen('home')}}><View style={styles.shortcutIconWrap}><Text style={styles.shortcutActionIcon}>♡</Text></View><Text style={styles.actionTitle}>Saved</Text><Text style={styles.actionText}>Your inspiration</Text></Pressable><Pressable style={styles.actionCard} onPress={()=>{setTab('Bookings');setScreen('home')}}><View style={styles.shortcutIconWrap}><BookingClockIcon size={36}/></View><Text style={styles.actionTitle}>Bookings</Text><Text style={styles.actionText}>Appointments</Text></Pressable></View></>}{renderProfileSection()}{isAdmin&&<Pressable style={styles.adminInboxCard} onPress={()=>setScreen('admin-feedback')}><View style={styles.adminInboxBadge}><Text style={styles.adminInboxBadgeText}>ADMIN</Text></View><View style={styles.adminInboxIcon}><Text style={styles.adminInboxIconText}>✦</Text></View><View style={{flex:1}}><Text style={styles.adminInboxKicker}>NAILLY ADMIN</Text><Text style={styles.adminInboxTitle}>Feedback inbox</Text><Text style={styles.adminInboxText}>Read client ideas, reply as Nailly Team and manage conversation status.</Text><View style={styles.adminInboxAction}><Text style={styles.adminInboxActionText}>Open inbox</Text><Text style={styles.adminInboxArrow}>→</Text></View></View></Pressable>}{isAdmin&&<Pressable style={styles.moderationCard} onPress={()=>setScreen('admin-moderation')}><View style={styles.moderationBadge}><Text style={styles.moderationBadgeText}>SAFETY</Text></View><View style={styles.moderationIcon}><Text style={styles.moderationIconText}>⚑</Text></View><View style={{flex:1}}><Text style={styles.adminInboxKicker}>NAILLY ADMIN</Text><Text style={styles.adminInboxTitle}>Moderation queue</Text><Text style={styles.adminInboxText}>Review reported designs and reviews, then dismiss or remove content.</Text><View style={styles.adminInboxAction}><Text style={styles.adminInboxActionText}>Review reports</Text><Text style={styles.adminInboxArrow}>→</Text></View></View></Pressable>}
-<Pressable style={styles.feedbackInviteCard} onPress={()=>setScreen('feedback')}><View style={styles.feedbackInviteGlow}/><View style={styles.feedbackInviteIcon}><Text style={styles.feedbackInviteIconText}>✦</Text></View><View style={{flex:1}}><Text style={styles.feedbackInviteKicker}>HELP US SHAPE NAILLY</Text><Text style={styles.feedbackInviteTitle}>Ideas & feedback</Text><Text style={styles.feedbackInviteText}>Tell us what you want next, what feels confusing, or what we should improve.</Text><View style={styles.feedbackInviteAction}><Text style={styles.feedbackInviteActionText}>Share feedback</Text><Text style={styles.feedbackInviteArrow}>→</Text></View></View></Pressable><Pressable style={styles.signOutRow} onPress={()=>supabase.auth.signOut()}><Text style={styles.signOutText}>Sign out</Text><Text style={styles.signOutText}>→</Text></Pressable></>:<><Empty title="Welcome to Nailly" detail="Sign in as a client or create an artist account to show your work."/><Button label="Sign in or create account" onPress={()=>setScreen('auth')}/></>}{renderLegalMenu()}</>}
+<Pressable style={styles.contactInviteCard} onPress={()=>setScreen('contact')}><View style={styles.contactInviteIcon}><Text style={styles.contactInviteIconText}>✉</Text></View><View style={{flex:1}}><Text style={styles.contactInviteKicker}>SUPPORT & CONTACT</Text><Text style={styles.contactInviteTitle}>Need help?</Text><Text style={styles.contactInviteText}>Contact Nailly directly for account, booking, studio or privacy questions.</Text><View style={styles.contactInviteAction}><Text style={styles.contactInviteActionText}>Open contact page</Text><Text style={styles.contactInviteArrow}>→</Text></View></View></Pressable><Pressable style={styles.feedbackInviteCard} onPress={()=>setScreen('feedback')}><View style={styles.feedbackInviteGlow}/><View style={styles.feedbackInviteIcon}><Text style={styles.feedbackInviteIconText}>✦</Text></View><View style={{flex:1}}><Text style={styles.feedbackInviteKicker}>HELP US SHAPE NAILLY</Text><Text style={styles.feedbackInviteTitle}>Ideas & feedback</Text><Text style={styles.feedbackInviteText}>Tell us what you want next, what feels confusing, or what we should improve.</Text><View style={styles.feedbackInviteAction}><Text style={styles.feedbackInviteActionText}>Share feedback</Text><Text style={styles.feedbackInviteArrow}>→</Text></View></View></Pressable><Pressable style={styles.signOutRow} onPress={()=>supabase.auth.signOut()}><Text style={styles.signOutText}>Sign out</Text><Text style={styles.signOutText}>→</Text></Pressable></>:<><Empty title="Welcome to Nailly" detail="Sign in as a client or create an artist account to show your work."/><Button label="Sign in or create account" onPress={()=>setScreen('auth')}/></>}{renderLegalMenu()}</>}
     </Animated.View>
     {!!error && <View style={styles.notice}><Text style={styles.noticeText}>Data connection: {error}</Text><Button label="Try again" secondary onPress={() => refresh(session?.user.id)} /></View>}
   </ScrollView>
@@ -973,6 +974,74 @@ function EditLookScreen({ look, onSaved, notify }: { look: Look; onSaved: (look:
     } catch (e) { notify('Could not update design', friendlyError(e), 'error'); } finally { setBusy(false); }
   }
   return <><View style={styles.editScreenHead}><View><Text style={styles.profileKicker}>EDIT DESIGN</Text><Text style={styles.title}>Polish your look.</Text></View><View style={styles.editIconBadge}><Text style={styles.editIconBadgeText}>✎</Text></View></View><Pressable style={styles.editImageWrap} onPress={chooseReplacementImage}><Image source={{uri:image?.uri || look.image_url}} style={styles.editImage}/><View style={styles.changeImagePill}><Text style={styles.changeImageText}>✎ Change photo</Text></View></Pressable><View style={styles.formCard}><Field label="Design name" value={title} onChangeText={setTitle} placeholder="Design name"/><Field label="Starting price (€)" value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="45"/><Button label={busy?'Saving changes…':'Save design changes'} onPress={save} disabled={busy}/></View></>;
+}
+
+function ContactScreen() {
+  const email = 'svetoslavov.plamen@gmail.com';
+  const phone = '+359883427273';
+
+  const openEmail = async () => {
+    const subject = encodeURIComponent('Nailly Support');
+    const body = encodeURIComponent('Hello Nailly Team,\n\n');
+    await Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`);
+  };
+
+  const callPhone = async () => {
+    await Linking.openURL(`tel:${phone}`);
+  };
+
+  return <>
+    <View style={styles.contactHero}>
+      <View style={styles.contactGlowOne}/>
+      <View style={styles.contactGlowTwo}/>
+      <Text style={styles.contactBrand}>nailly<Text style={{color:colors.coral}}>.</Text></Text>
+      <Text style={styles.contactKicker}>CONTACT & SUPPORT</Text>
+      <Text style={styles.contactTitle}>We’re here to help.</Text>
+      <Text style={styles.contactIntro}>Questions about your account, bookings, studio profile or privacy? Get in touch with Nailly directly.</Text>
+    </View>
+
+    <View style={styles.contactOwnerCard}>
+      <View style={styles.contactOwnerIcon}><Text style={styles.contactOwnerIconText}>✦</Text></View>
+      <View style={{flex:1}}>
+        <Text style={styles.contactOwnerLabel}>NAILLY CONTACT</Text>
+        <Text style={styles.contactOwnerName}>Plamen Svetoslavov Krastev</Text>
+        <Text style={styles.contactOwnerRole}>Founder · Nailly</Text>
+      </View>
+    </View>
+
+    <Pressable style={styles.contactActionCard} onPress={openEmail}>
+      <View style={styles.contactActionIcon}><Text style={styles.contactActionIconText}>✉</Text></View>
+      <View style={{flex:1}}>
+        <Text style={styles.contactActionLabel}>EMAIL SUPPORT</Text>
+        <Text style={styles.contactActionValue}>{email}</Text>
+        <Text style={styles.contactActionHint}>Tap to open your email app</Text>
+      </View>
+      <Text style={styles.contactActionArrow}>›</Text>
+    </Pressable>
+
+    <Pressable style={styles.contactActionCard} onPress={callPhone}>
+      <View style={styles.contactActionIcon}><Text style={styles.contactActionIconText}>☎</Text></View>
+      <View style={{flex:1}}>
+        <Text style={styles.contactActionLabel}>PHONE</Text>
+        <Text style={styles.contactActionValue}>+359 883 427273</Text>
+        <Text style={styles.contactActionHint}>Tap to call</Text>
+      </View>
+      <Text style={styles.contactActionArrow}>›</Text>
+    </Pressable>
+
+    <View style={styles.contactSupportNote}>
+      <Text style={styles.contactSupportNoteIcon}>♡</Text>
+      <View style={{flex:1}}>
+        <Text style={styles.contactSupportNoteTitle}>For ideas & product feedback</Text>
+        <Text style={styles.contactSupportNoteText}>Use the Ideas & feedback section in your profile so the conversation stays inside Nailly.</Text>
+      </View>
+    </View>
+
+    <View style={styles.contactHours}>
+      <Text style={styles.contactHoursTitle}>Support</Text>
+      <Text style={styles.contactHoursText}>We aim to respond to support requests as quickly as possible. For urgent account or privacy issues, email is the preferred contact method.</Text>
+    </View>
+  </>;
 }
 
 function LegalScreen({ pageKey, onOpen, onDelete, notify }: { pageKey: LegalPageKey | 'account'; onOpen: (key: LegalPageKey | 'account') => void; onDelete: () => Promise<void>; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
@@ -1563,6 +1632,47 @@ const styles = StyleSheet.create({
   adminDeleteCancelText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
   adminDeleteConfirmButton: { minHeight: 46, borderRadius: 16, backgroundColor: '#b95161', alignItems: 'center', justifyContent: 'center' },
   adminDeleteConfirmText: { color: 'white', fontSize: 11, fontWeight: '900' },
+
+  contactInviteCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff8fb', borderWidth: 1, borderColor: '#eedce5', borderRadius: 24, padding: 17, marginTop: 12, marginBottom: 10 },
+  contactInviteIcon: { width: 48, height: 48, borderRadius: 18, backgroundColor: '#f8e8ef', alignItems: 'center', justifyContent: 'center', marginRight: 13 },
+  contactInviteIconText: { color: '#b86c8d', fontSize: 21, fontWeight: '900' },
+  contactInviteKicker: { color: '#a66a87', fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
+  contactInviteTitle: { color: colors.ink, fontFamily: 'Georgia', fontSize: 21, lineHeight: 26, marginTop: 3 },
+  contactInviteText: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 5 },
+  contactInviteAction: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  contactInviteActionText: { color: '#9b627e', fontSize: 10, fontWeight: '900' },
+  contactInviteArrow: { color: '#9b627e', fontSize: 15, marginLeft: 6 },
+
+  contactHero: { position: 'relative', overflow: 'hidden', backgroundColor: '#fff5f8', borderWidth: 1, borderColor: '#efdae4', borderRadius: 28, padding: 22, marginBottom: 16 },
+  contactGlowOne: { position: 'absolute', width: 130, height: 130, borderRadius: 65, backgroundColor: '#f9dfe8', right: -32, top: -38, opacity: .75 },
+  contactGlowTwo: { position: 'absolute', width: 90, height: 90, borderRadius: 45, backgroundColor: '#f5e8ef', left: -24, bottom: -30, opacity: .8 },
+  contactBrand: { color: colors.ink, fontFamily: 'Georgia', fontSize: 23, fontWeight: '700', marginBottom: 12 },
+  contactKicker: { color: '#a56a86', fontSize: 8, fontWeight: '900', letterSpacing: 1.2 },
+  contactTitle: { color: colors.ink, fontFamily: 'Georgia', fontSize: 30, lineHeight: 36, marginTop: 4 },
+  contactIntro: { color: colors.muted, fontSize: 11, lineHeight: 17, marginTop: 8, maxWidth: 295 },
+
+  contactOwnerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 22, borderWidth: 1, borderColor: colors.edge, padding: 16, marginBottom: 12 },
+  contactOwnerIcon: { width: 48, height: 48, borderRadius: 18, backgroundColor: '#f7e8ef', alignItems: 'center', justifyContent: 'center', marginRight: 13 },
+  contactOwnerIconText: { color: '#b66d8b', fontSize: 21, fontWeight: '900' },
+  contactOwnerLabel: { color: '#a36b85', fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  contactOwnerName: { color: colors.ink, fontSize: 14, fontWeight: '900', marginTop: 3 },
+  contactOwnerRole: { color: colors.muted, fontSize: 10, marginTop: 2 },
+
+  contactActionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 20, borderWidth: 1, borderColor: colors.edge, padding: 15, marginBottom: 10 },
+  contactActionIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: '#fff2f6', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  contactActionIconText: { color: colors.coralDeep, fontSize: 19, fontWeight: '900' },
+  contactActionLabel: { color: '#aa6d88', fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  contactActionValue: { color: colors.ink, fontSize: 12, fontWeight: '900', marginTop: 3 },
+  contactActionHint: { color: colors.muted, fontSize: 9, marginTop: 3 },
+  contactActionArrow: { color: '#c17b99', fontSize: 24, marginLeft: 8 },
+
+  contactSupportNote: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff8fb', borderRadius: 18, borderWidth: 1, borderColor: '#efdde5', padding: 14, marginTop: 4 },
+  contactSupportNoteIcon: { color: '#d27ea4', fontSize: 19, marginRight: 10 },
+  contactSupportNoteTitle: { color: colors.ink, fontSize: 11, fontWeight: '900' },
+  contactSupportNoteText: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 3 },
+  contactHours: { marginTop: 14, backgroundColor: '#faf5f7', borderRadius: 18, padding: 14 },
+  contactHoursTitle: { color: colors.ink, fontSize: 11, fontWeight: '900' },
+  contactHoursText: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 4 },
 
   feedbackInviteCard: { backgroundColor: colors.cream, borderWidth: 1, borderColor: '#efd9dc', borderRadius: 24, padding: 18, flexDirection: 'row', alignItems: 'flex-start', overflow: 'hidden', position: 'relative', marginTop: 6, marginBottom: 8, shadowColor: colors.ink, shadowOpacity: .06, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 2 },
   feedbackInviteGlow: { position: 'absolute', width: 130, height: 130, borderRadius: 65, right: -46, top: -54, backgroundColor: '#f6d9e5', opacity: .72 },
