@@ -1,0 +1,43 @@
+name: Generate Brand Assets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/source/icon.svg'
+      - 'assets/source/splash-icon.svg'
+      - '.github/workflows/generate-brand-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SVG renderer
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: Render production PNG assets
+        run: |
+          mkdir -p assets
+          rsvg-convert -w 1024 -h 1024 assets/source/icon.svg -o assets/icon.png
+          rsvg-convert -w 1000 -h 520 assets/source/splash-icon.svg -o assets/splash-icon.png
+          file assets/icon.png assets/splash-icon.png
+
+      - name: Commit generated assets
+        run: |
+          if git diff --quiet -- assets/icon.png assets/splash-icon.png && git ls-files --error-unmatch assets/icon.png >/dev/null 2>&1 && git ls-files --error-unmatch assets/splash-icon.png >/dev/null 2>&1; then
+            echo "Brand assets are already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/icon.png assets/splash-icon.png
+          git commit -m "Generate production Nailly brand assets"
+          git push
