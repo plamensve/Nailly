@@ -450,21 +450,54 @@ function LegalScreen({ pageKey, onOpen, onDelete, notify }: { pageKey: LegalPage
 function AuthScreen({ onDone, notify }: { onDone: () => void; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void }) {
   const [register, setRegister] = useState(false), [artist, setArtist] = useState(false), [busy, setBusy] = useState(false);
   const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [name, setName] = useState('');
+  const [showEmailConfirm, setShowEmailConfirm] = useState(false);
   async function submit() {
-    if (!email.trim() || password.length < 6 || (register && !name.trim())) { Alert.alert('Check your details', 'Enter a name, email and a password of at least 6 characters.'); return; }
+    if (!email.trim() || password.length < 6 || (register && !name.trim())) { notify('Check your details', 'Enter a name, email and a password of at least 6 characters.', 'info'); return; }
     setBusy(true);
     try {
       if (register) {
         const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: 'https://naillyapp.com/auth/callback/', data: { display_name: name.trim(), role: artist ? 'artist' : 'client' } } });
         if (error) throw error;
-        if (!data.session) notify('Check your email', 'We sent you a confirmation link. Open your email and confirm your address, then sign in to Nailly.', 'info'); else onDone();
-      } else { const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }); if (error) throw error; onDone(); }
-    } catch (e) { message('Account', e); } finally { setBusy(false); }
+        if (!data.session) {
+          setPassword('');
+          setShowEmailConfirm(true);
+        } else {
+          onDone();
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (error) throw error;
+        onDone();
+      }
+    } catch (e) {
+      notify('Account', friendlyError(e), 'error');
+    } finally {
+      setBusy(false);
+    }
   }
-  return <><Text style={styles.eyebrow}>WELCOME TO NAILLY</Text><Text style={styles.title}>{register ? 'Join Nailly' : 'Welcome back'}</Text><Text style={styles.body}>{register ? 'Find your next look or share your work with clients.' : 'Sign in to save looks and manage appointments.'}</Text>
+  return <>
+    <Text style={styles.eyebrow}>WELCOME TO NAILLY</Text>
+    <Text style={styles.title}>{register ? 'Join Nailly' : 'Welcome back'}</Text>
+    <Text style={styles.body}>{register ? 'Find your next look or share your work with clients.' : 'Sign in to save looks and manage appointments.'}</Text>
     {register && <><Field label="Your name" value={name} onChangeText={setName} placeholder="Your name" /><Text style={styles.fieldLabel}>Account type</Text><View style={styles.choiceRow}><Pressable onPress={() => setArtist(false)} style={[styles.choice, !artist && styles.choiceActive]}><Text style={styles.choiceText}>Client</Text></Pressable><Pressable onPress={() => setArtist(true)} style={[styles.choice, artist && styles.choiceActive]}><Text style={styles.choiceText}>Nail artist / studio</Text></Pressable></View></>}
-    <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="you@example.com" /><Field label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 6 characters" />
-    <Button label={busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} /><Button label={register ? 'I already have an account' : 'Create a new account'} secondary onPress={() => setRegister(!register)} /></>;
+    <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="you@example.com" />
+    <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 6 characters" />
+    <Button label={busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} />
+    <Button label={register ? 'I already have an account' : 'Create a new account'} secondary onPress={() => setRegister(!register)} />
+    <Modal transparent visible={showEmailConfirm} animationType="fade" onRequestClose={()=>setShowEmailConfirm(false)}>
+      <View style={styles.naillyModalBackdrop}>
+        <View style={styles.naillyDeleteModal}>
+          <Text style={styles.modalBrand}>nailly<Text style={{color:colors.coral}}>.</Text></Text>
+          <Text style={styles.naillyModalTitle}>Check your email</Text>
+          <Text style={styles.naillyModalBody}>We sent a confirmation link to {email.trim()}. Open the email and confirm your address before signing in to Nailly.</Text>
+          <View style={styles.naillyModalActions}>
+            <Pressable style={styles.naillyModalKeep} onPress={()=>setShowEmailConfirm(false)}><Text style={styles.naillyModalKeepText}>Stay here</Text></Pressable>
+            <Pressable style={styles.naillyModalRemove} onPress={()=>{setShowEmailConfirm(false);setRegister(false);}}><Text style={styles.naillyModalRemoveText}>Go to sign in</Text></Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  </>;
 }
 
 function StudioScreen({ session, studio, looks, bookings, onRefresh, notify, onOpenBooking, onOpenReviews, onOpenLook, onStudioCreated }: { session: Session | null; studio: Studio | null; looks: Look[]; bookings: Booking[]; onRefresh: () => Promise<void>; notify: (title:string,detail:string,type?:'success'|'error'|'info') => void; onOpenBooking: (booking: Booking) => void; onOpenReviews: (studio: Studio) => void; onOpenLook: (look: Look) => void; onStudioCreated: () => Promise<void> }) {
